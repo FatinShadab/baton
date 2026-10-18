@@ -1,124 +1,92 @@
 # Baton
 
-Baton is a VS Code sidebar for routing coding tasks. Type or speak a task, review
-the context that will be shared, and get a structured route: task type, risk tier,
-destination, and reason. The router tries Gemma 4 through Google AI Studio, then
-Gemma through Ollama Cloud, then local rules. A deterministic policy gate may raise
-risk, but never lower it. Tasks, plans, and outcomes are saved in VS Code's local
-extension storage.
+Baton is a VS Code extension for turning a coding request into a reviewed, context-aware handoff. Describe a task in the sidebar, choose what project context to share, and see a structured route with a task type, risk tier, destination, and reason. Baton keeps plans and outcomes in local extension storage so later tasks can use relevant project history.
 
-## Five-step live demo
+The router tries Gemma 4 through Google AI Studio, then Gemma through Ollama Cloud, then local rules. A separate, deterministic policy gate can raise the route's risk level but cannot lower it. Execution always remains a deliberate user action.
 
-1. Open this Baton repository in VS Code and press **F5**. The **Run Baton**
-   launch profile builds the extension and opens an **Extension Development
-   Host** in the current repository. The demo project is [`demo-repo`](demo-repo);
-   run `npm test` there to see the single failing date parser test.
-2. Open the Baton sidebar, click **Demo task**, then click **Prepare context**.
-   This selects the demo project; ordinary typed tasks use the open workspace.
-   Review the selected sources
-   under **What will be shared**; deselect anything you do not want to send.
-3. Click **Route task**. Show the answering router tier, moderate risk, and the
-   **CONFIRM** policy action. Results may vary by provider; the rules fallback
-   classifies this task as moderate.
-4. Choose a planning handoff. Baton uses installed Codex, Claude Code, or
-   Antigravity extensions when available, or opens ChatGPT or Gemini in a
-   browser. Review the prompt, then paste the resulting plan into Baton's
-   **Implementation Plan** field and save it.
-5. Click **Run in Codex**, confirm the workspace, and watch the VS Code terminal.
-   Run the test again, inspect **Show diff**, then **Mark done** to save the
-   outcome. The fix should make the UTC date assertion pass.
+## Features
 
-## Setup
+- **Reviewable context:** Preview the README summary, Git change summary, active editor excerpt, and relevant saved memories. Remove sources before routing.
+- **Visible routing:** See whether Gemma, Ollama, or rules answered, along with the selected destination, risk, and policy action.
+- **Planning handoffs:** Prepare a prompt for ChatGPT, Gemini, and supported installed VS Code coding assistants. Paste the resulting plan back into Baton to save it.
+- **Terminal execution:** Run an approved task with `codex exec` in a VS Code terminal, inspect the diff, and record the outcome.
+- **Read-only MCP tools:** Expose project overview, saved context, and the active plan to compatible MCP clients.
+- **Voice input:** Transcribe a spoken task when an ElevenLabs API key is configured.
 
-Requires Node 18+, VS Code 1.85+, and the Codex CLI for execution.
+## Requirements and setup
+
+- VS Code 1.85 or newer.
+- Node.js 18 or newer and npm to build the extension.
+- [Codex CLI](https://github.com/openai/codex) installed and signed in to use **Run in Codex**. Planning and routing do not require the CLI.
 
 ```sh
 npm install
-npm run check
 npm run build
-npm install -g @openai/codex
-codex
 ```
 
-For local debugging, open this repository folder in VS Code and press **F5**
-(or choose **Run Baton** in Run and Debug). Its prelaunch task runs `npm run
-build`; the new Extension Development Host opens the Baton repository. Click the Baton
-activity-bar icon there to open the sidebar. After changing TypeScript or
-webview files, run `npm run build` in the source window, then press **Ctrl+R**
-in the Development Host to reload the updated extension. On macOS use **Cmd+R**.
+Open this repository in VS Code and press **F5**, or select **Run Baton** in Run and Debug. The launch profile builds the extension and opens an Extension Development Host in the current repository. Select the Baton icon in the Activity Bar to open its sidebar.
 
-In the Command Palette, run **Baton: Set API Keys** to save `GEMINI_API_KEY` and
-`OLLAMA_API_KEY` in VS Code SecretStorage. Leave a prompt empty to keep its
-existing key. Keys are optional; with no working provider, routing uses rules.
-Voice transcription also asks for an `ELEVENLABS_API_KEY` through this command.
-During F5 development, Baton also imports those three keys from the extension
-repository's ignored `.env` into SecretStorage when the Development Host starts.
-Reload the Development Host after changing `.env`. The file is never added to
-task context or sent to a provider; only the requested API key is used for each
-call.
+After editing TypeScript or webview files, rebuild with `npm run build` and reload the Development Host. `npm run check` runs the TypeScript check.
 
-For the standalone router evaluation, run `npm run eval` from this repository.
-It writes [`eval-results.md`](eval-results.md) and prints the same table. To
-include live Gemma results, supply `GEMINI_API_KEY` as a temporary process
-environment variable; the evaluation does not save it. Without a key, Gemma
-cells are marked N/A rather than counted as errors. The ten hand-labeled tasks
-and their expected risk tiers are in [`scripts/eval.ts`](scripts/eval.ts).
+## Configure API keys
 
-## Architecture
+Use **Baton: Set API Keys** in the Command Palette. Baton stores keys in VS Code SecretStorage, not in extension settings or task history. Leaving a prompt empty keeps the existing value.
 
-- **Sidebar:** Vanilla HTML, CSS, and JavaScript in `media/`; no webview
-  framework. `src/extension.ts` connects UI messages to the services.
-- **Context and memory:** `src/context.ts` assembles a preview from the README,
-  filtered Git status and diff stats, the active editor, and matching local
-  memories. Users select sources before routing. `src/store.ts` persists JSON
-  under `context.globalStorageUri`; `src/memory.ts` indexes saved plans and
-  outcomes for recall.
-- **Routing:** `src/router/` validates Gemma or Ollama JSON with Zod, bounds
-  external calls, and falls back to `rules.ts` with a visible reason. Successful
-  model routes are cached by task and selected context; temporary rules fallbacks
-  are retried. `src/policy.ts` applies the independent
-  risk gate after routing.
-- **Handoff and execution:** `src/handoff.ts` builds a planning prompt. It opens
-  the installed Codex extension for ChatGPT handoff, places the prompt in the
-  installed Claude Code composer, or opens Antigravity with the prompt copied
-  for pasting. ChatGPT and Gemini browser handoffs remain available. `src/codex.ts` launches `codex exec` in a VS
-  Code terminal with policy-required confirmation. `src/history.ts` records
-  plans, approvals, status, and outcomes. `src/voice.ts` handles speech input.
-- **Build:** esbuild bundles the TypeScript extension into `dist/extension.js`.
+| Key | Used for |
+| --- | --- |
+| `GEMINI_API_KEY` | Primary Gemma 4 route through Google AI Studio |
+| `OLLAMA_API_KEY` | Fallback Gemma route through Ollama Cloud |
+| `ELEVENLABS_API_KEY` | Optional voice transcription |
 
-## Read-only MCP server
+For **F5 development**, the Extension Development Host also imports these keys from this repository's ignored `.env` file into SecretStorage when Baton activates. For example:
 
-`npm run build` also creates `out/mcp.js`, a stdio MCP server. Run **Baton: Copy
-MCP Config** from the Command Palette to copy a ready-to-paste `mcpServers` JSON
-snippet for the current workspace. The snippet sets `BATON_MEMORY_PATH` to the
-extension's local `memory.json` and `BATON_PROJECT_ROOT` to the workspace folder.
-The server reads `tasks.json` beside `memory.json` for the latest task whose
-status is `planned`.
-The sidebar's **Start MCP** button starts the built server and checks that its
-tools respond; **Stop MCP** closes that local session. VS Code can also start its
-registered MCP provider when a chat uses the tools.
+```dotenv
+GEMINI_API_KEY=your_key
+OLLAMA_API_KEY=your_key
+ELEVENLABS_API_KEY=your_key
+```
 
-The tools are `get_project_overview` (README introduction and file tree to depth 2),
-`search_project_context(query)` (MiniSearch over saved memory), and
-`get_active_plan` (latest saved planned task). They read current JSON on every
-call and never modify it. VS Code versions with the MCP server provider API also
-discover the server automatically; older versions can use the copied snippet.
+Reload the Development Host after changing `.env`. This import is a development convenience; the file itself is excluded from task context. If neither model service is available, Baton explains the failure and uses local rules. A rules result is not presented as a Gemma result.
 
-## Honest limits
+## Use Baton
 
-The sidebar shows Claude Code and Antigravity handoff buttons only when their
-extensions are installed. The ChatGPT button opens the installed Codex extension
-when present and otherwise opens ChatGPT in the browser. Codex and Antigravity
-receive the copied prompt for manual pasting; Claude Code receives it in its
-composer for review. Baton cannot read their responses; paste the plan back into
-the sidebar. Codex execution goes through
-the installed Codex CLI in a VS Code terminal, not a web chat or background API.
-The extension does not infer that a terminal run finished successfully; run
-tests and mark the outcome yourself. Live model routing needs working API keys
-and access to the configured model tags. The rule router is a fallback, and its
-keyword decisions can misclassify tasks; see the raw-risk evaluation table.
+1. **Describe the task.** Type in the sidebar or use voice input. An ordinary task uses the open workspace.
+2. **Prepare context.** Review the source preview and deselect anything you do not want in the routing request. Baton sends only selected context, capped at 6,000 characters.
+3. **Route task.** Review the answering router, destination, risk, reason, and policy action. Model responses are validated before use; the policy gate runs after routing.
+4. **Prepare and save a plan.** Choose a planning handoff, review the generated prompt, and paste the assistant's plan into **Implementation Plan**. Save it in Baton.
+5. **Run and record the result.** If appropriate, choose **Run in Codex**, confirm when required, inspect the terminal and **Show diff**, then **Mark done** to save the outcome.
 
-Context excludes `.env`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`,
-`node_modules`, and `.git`, and skips files over 100 KB. Previewing context is
-local; routing sends only the sources you keep selected, capped at 6,000
-characters. Run actions require a trusted workspace.
+### Planning destinations
+
+| Destination | Baton handoff |
+| --- | --- |
+| ChatGPT / Codex | Opens the installed OpenAI Codex VS Code extension when available and copies the prompt for pasting. Otherwise opens ChatGPT in a browser. |
+| Gemini | Opens Gemini in a browser with the prompt copied for pasting. |
+| Claude Code | When its VS Code extension is installed, opens it with the prompt placed in its composer for review. |
+| Antigravity | When its VS Code extension is installed, opens its panel and copies the prompt for pasting. |
+
+Claude Code and Antigravity controls appear only when their extensions are detected. Baton does not read responses from those assistants; paste a plan back into the sidebar. **Run in Codex** uses the Codex CLI in a VS Code terminal, and Baton does not automatically infer whether that terminal run succeeded.
+
+## MCP server
+
+`npm run build` creates the stdio server at `out/mcp.js`. The sidebar's **Start MCP** button starts a local session and checks that the tools respond; **Stop MCP** closes it. Compatible VS Code versions can discover Baton's registered MCP provider. **Baton: Copy MCP Config** copies an `mcpServers` JSON snippet for an external client or a VS Code version that needs manual configuration.
+
+| Tool | Returns |
+| --- | --- |
+| `get_project_overview` | README introduction and a shallow project file tree |
+| `search_project_context(query)` | Relevant saved project memories |
+| `get_active_plan` | The latest saved task with `planned` status |
+
+The MCP tools are read-only. The copied configuration points the server to the current workspace and Baton's local memory files.
+
+## Data and security
+
+Baton saves tasks, plans, outcomes, and memory as JSON under VS Code's `context.globalStorageUri`. Context preparation is local; routing sends the selected excerpt to the active model provider. Sensitive paths and data are excluded from context, including `.env`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `node_modules`, and `.git`; files over 100 KB are skipped. Running a task requires a trusted workspace and any confirmation required by the policy gate.
+
+## Demo and development
+
+The **Demo task** button explicitly selects the bundled [`demo-repo`](demo-repo). It is separate from ordinary tasks, which use the open workspace. In the demo project, `npm test` shows a failing date parser test to use for a complete routing, planning, execution, and review walkthrough.
+
+To run the standalone routing evaluation, use `npm run eval`. It writes [`eval-results.md`](eval-results.md); the labeled cases are in [`scripts/eval.ts`](scripts/eval.ts). Live Gemma evaluation requires a `GEMINI_API_KEY` process environment variable. Without one, live model results are marked unavailable.
+
+The extension is written in TypeScript and bundled with esbuild. Its sidebar uses vanilla HTML, CSS, and JavaScript in `media/`; the extension services live in `src/`.
