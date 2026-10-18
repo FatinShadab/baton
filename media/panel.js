@@ -374,9 +374,7 @@
       }
       const spoken = (data.text || '').trim();
       if (spoken) {
-        const prev = task.value.trim();
-        task.value = prev ? `${prev} ${spoken}` : spoken;
-        vscode.setState({ task: task.value });
+        task.value = spoken;
         task.dispatchEvent(new Event('input'));
         status.textContent = `Transcribed: "${spoken}"`;
         showToast(`Transcribed: "${spoken}"`, 'success', 2500);
