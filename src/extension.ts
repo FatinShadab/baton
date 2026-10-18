@@ -4,22 +4,25 @@ import { setKeys } from './secrets';
 import { JsonStore } from './store';
 import { initializeRouter, routeTask } from './router';
 import { decide } from './policy';
-import { ExtensionMessage, isHandoffMessage, isHistoryMessage, isPanelMessage, isVoiceMessage } from './types';
+import { ExtensionMessage, isHandoffMessage, isHistoryMessage, isPanelMessage, isTaskActionMessage, isVoiceMessage } from './types';
 import { buildContext, BuiltContext, MAX_CONTEXT_CHARS, selectContext } from './context';
 import { initializeMemory, MemoryStore } from './memory';
 import { TaskHistory } from './history';
 import { planExternal, readClipboard } from './handoff';
 import { FallbackServerSession, initVoice, startVoiceFallbackServer, transcribe } from './voice';
+import { CodexRunner } from './codex';
 
 export function activate(context: vscode.ExtensionContext): { store: JsonStore; memory: MemoryStore } {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
   const store = new JsonStore(context.globalStorageUri);
   const memory = initializeMemory(store);
   const history = new TaskHistory(store, memory);
+  const codex = new CodexRunner(store, history);
 
   initVoice(context.secrets);
 
   context.subscriptions.push(
+    codex,
     initializeRouter(context.secrets),
     vscode.commands.registerCommand('baton.setKeys', () => setKeys(context.secrets)),
     vscode.commands.registerCommand('baton.focus', async () => {
@@ -48,6 +51,14 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
         };
 
         const listener = view.webview.onDidReceiveMessage(async (message: unknown) => {
+          if (isTaskActionMessage(message)) {
+            const reply = await codex.handle(message);
+            try {
+              await view.webview.postMessage(reply);
+              await view.webview.postMessage(await history.handle({ type: 'loadHistory' }));
+            } catch { /* A closed sidebar can no longer receive messages. */ }
+            return;
+          }
           if (isHistoryMessage(message)) {
             try {
               await view.webview.postMessage(await history.handle(message));
@@ -70,6 +81,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
               } else if (message.type === 'savePlan') {
                 const notice = await history.save(message.taskId, { plan: message.plan });
                 await view.webview.postMessage({ type: 'planSaved', taskId: message.taskId, notice });
+                await view.webview.postMessage(await history.handle({ type: 'loadHistory' }));
               }
             } catch {
               try {
@@ -126,6 +138,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
               throw new Error('Prepare a context preview before routing.');
             }
             const snippet = selectContext(preview.context, message.sources);
+            const workspaceUri = preview.context.workspaceUri;
             const { route, tier } = await routeTask(message.text, snippet);
             const decision = decide(route, message.text);
             const taskId = randomUUID();
@@ -136,6 +149,8 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
               route: decision.route,
               routerTier: tier,
               decision: decision.action,
+              workspaceUri,
+              contextSnippet: snippet,
               status: decision.action === 'BLOCK' ? 'blocked' : 'routed',
             });
             lastRouted = { taskId, text: message.text, snippet };
@@ -164,6 +179,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
             cspSource: view.webview.cspSource,
             scriptUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'panel.js')).toString(),
             historyUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'history.js')).toString(),
+            actionsUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'task-actions.js')).toString(),
             styleUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'panel.css')).toString(),
           };
           view.webview.html = Buffer.from(template).toString('utf8').replace(

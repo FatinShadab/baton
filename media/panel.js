@@ -1,6 +1,7 @@
 (() => {
   const vscode = acquireVsCodeApi();
-  initializeHistory(vscode);
+  const taskActions = initializeTaskActions(vscode);
+  initializeHistory(vscode, taskActions);
   const form = document.getElementById('task-form');
   const task = document.getElementById('task');
   const card = document.getElementById('route-card');
@@ -17,6 +18,9 @@
   const useClipboardBtn = document.getElementById('use-clipboard');
   const planStatus = document.getElementById('plan-status');
   const micBtn = document.getElementById('mic-btn');
+  const controls = document.getElementById('task-controls');
+  const taskStatus = document.getElementById('task-status');
+  const taskOutcome = document.getElementById('task-outcome');
   let requestId = 0;
   let ready = false;
   let parts = [];
@@ -40,6 +44,9 @@
     submit.textContent = 'Prepare context';
     status.textContent = '';
     currentTaskId = '';
+    controls.replaceChildren();
+    taskStatus.textContent = '';
+    taskOutcome.textContent = '';
     planSection.hidden = true;
     planText.value = '';
     planStatus.textContent = '';
@@ -132,9 +139,22 @@
   });
 
   window.addEventListener('message', ({ data }) => {
-    if (data?.type === 'history' && data.changed) {
-      // A newly imported plan must be included in a fresh context snapshot.
-      task.dispatchEvent(new Event('input'));
+    if (data?.type === 'taskActionResult') {
+      if (data.taskId === currentTaskId) taskStatus.textContent = data.notice;
+      return;
+    }
+    if (data?.type === 'history') {
+      const current = data.tasks.find((entry) => entry.id === currentTaskId);
+      if (current) {
+        taskActions.render(controls, current);
+        taskOutcome.textContent = `Status: ${current.status}` + (current.outcome ? ` · Outcome: ${current.outcome}` : '');
+      }
+      // Refresh memory on the next routing pass without discarding the active task card.
+      if (data.changed) {
+        ready = false;
+        preview.hidden = true;
+        submit.textContent = 'Prepare context';
+      }
       return;
     }
     if (data?.type === 'voiceText') {
@@ -179,6 +199,9 @@
     if (data?.type === 'planSaved') {
       savePlanBtn.disabled = false;
       planStatus.textContent = data.notice ?? 'Plan saved to memory.';
+      ready = false;
+      preview.hidden = true;
+      submit.textContent = 'Prepare context';
       return;
     }
     if (data?.type === 'planSaveError') {
@@ -232,10 +255,14 @@
     if (data?.type !== 'routed' || !data.decision?.route) return;
     currentTaskId = data.taskId || '';
     submit.disabled = false;
-    status.textContent = data.saved ? 'Saved. Open History to import a plan or mark this task complete.'
+    status.textContent = data.saved ? 'Saved. Use the task controls below or open History.'
       : 'Route ready, but local memory could not be saved.';
     if (data.text !== task.value) return;
     const { route, action, why } = data.decision;
+    taskStatus.textContent = '';
+    taskOutcome.textContent = '';
+    taskActions.render(controls, { id: currentTaskId, route, decision: action,
+      status: action === 'BLOCK' ? 'blocked' : 'routed', saved: data.saved });
     if (!['low', 'moderate', 'high'].includes(route.risk_tier)) return;
     const risk = document.getElementById('risk');
     risk.textContent = route.risk_tier;

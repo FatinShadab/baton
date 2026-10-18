@@ -25,9 +25,34 @@ and can only raise risk. The sidebar shows the answering tier; the policy-adjust
 route and decision are saved in `tasks.json` under the extension's global storage.
 
 Open **History** to see past tasks with their time, text, risk, router tier, and
-status. Expand a task to inspect its routing details, paste a plan with **Import
-plan**, or record an optional outcome with **Mark complete**. These actions record
-your work; they do not execute it. Completed tasks show **Save outcome** for updates.
+status. Expand a task to inspect its routing details or paste a plan with **Import
+plan**. The Task card and History both offer **Run in Codex**, **Mark done**,
+**Show diff**, and **Run tests**.
+
+**Run in Codex** is available for saved tasks whose policy permits RUN or CONFIRM.
+CONFIRM displays the workspace path in a Run / Cancel modal and records approval
+before execution. Running and completed tasks cannot launch again; route a new task
+for another run. The extension rechecks policy, including the saved plan, before launch.
+
+Install the CLI with `npm install -g @openai/codex` and sign in using `codex`.
+If the CLI is unavailable, Baton offers **Copy prompt instead**. The prompt contains
+the task, latest saved plan, and the context selected when routing. It is passed through
+a temporary UTF-8 file to `codex exec --sandbox workspace-write` in **Baton: Codex**.
+Windows uses PowerShell stdin; POSIX uses quoted file substitution. Temporary files
+are removed after execution or terminal closure. Dedicated Baton terminals have a
+30-minute limit. Closing the extension stops its terminals; it never infers completion.
+
+**Show diff** opens Source Control. **Run tests** runs `npm test` in **Baton: Tests**
+only when the saved workspace root has a readable `package.json` with `scripts.test`.
+**Mark done** asks for Passed / Failed / Partial and saves the result and filtered
+`git diff --name-only` filenames to History and searchable task memory. This is a
+snapshot of unstaged tracked changes, including preexisting edits; untracked and
+staged-only files are not included. Git failures still allow saving the outcome,
+with a notice that changed files were unavailable. Previous free-text outcomes remain visible.
+
+Tasks remember their original workspace. Reopen it to run workspace actions after
+switching projects. Older tasks use the sole local folder or ask you to choose one.
+Codex and test execution require a trusted workspace.
 
 Imported plans and completed tasks are indexed by MiniSearch and saved to
 `memory.json` in the extension's global storage after every addition. The search
@@ -43,7 +68,7 @@ To try plan recall:
 3. In **Task**, enter “Improve login rate limiting” and click **Prepare context**.
 4. The preview should include a **Memory plan** source containing the imported plan.
    Unticking it removes that source from the router context. Reloading the extension
-   preserves searchable plans; **Mark complete** also saves a `task` memory item.
+   preserves searchable plans; **Mark done** also saves a `task` memory item.
 
 `@google/genai` is pinned to 1.0.0 to retain its declared Node 18 support.
 The Ollama tag is the `OLLAMA_MODEL` constant in `src/router/ollama.ts`; change it
@@ -63,3 +88,10 @@ Manual acceptance checks with a task such as “Add a loading indicator”:
 
 Confirm each submission creates a task record with its tier and policy decision.
 Live provider checks require working account access to the configured model tags.
+
+To verify execution, use a disposable Git repository with an existing tracked file
+and a `package.json` test script. Route a concrete code change and confirm moderate
+risk / CONFIRM. Cancel once and verify the task remains routed, then run it and
+review the Codex terminal. Run tests, open Show diff, choose Mark done → Passed,
+and reload History to verify the outcome, approval, and changed filenames persisted.
+Also check that high-risk tasks cannot run and that a missing CLI offers prompt copying.

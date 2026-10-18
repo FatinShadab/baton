@@ -5,8 +5,17 @@ export type PanelMessage =
   | { type: 'routeTask'; text: string; requestId: number; sources: string[] };
 export type HistoryMessage =
   | { type: 'loadHistory' }
-  | { type: 'importPlan'; taskId: string; plan: string }
-  | { type: 'completeTask'; taskId: string; outcome: string };
+  | { type: 'importPlan'; taskId: string; plan: string };
+export type TaskAction = 'runCodex' | 'markDone' | 'showDiff' | 'runTests';
+export type TaskActionMessage = { type: TaskAction; taskId: string };
+export type TaskActionReply = { type: 'taskActionResult'; taskId: string; notice: string };
+
+export function isTaskActionMessage(message: unknown): message is TaskActionMessage {
+  if (typeof message !== 'object' || message === null) return false;
+  return 'type' in message && typeof message.type === 'string'
+    && ['runCodex', 'markDone', 'showDiff', 'runTests'].includes(message.type)
+    && 'taskId' in message && typeof message.taskId === 'string' && message.taskId.length > 0;
+}
 export type HistoryReply =
   | { type: 'history'; tasks: TaskRecord[]; notice?: string; changed: boolean }
   | { type: 'historyError'; message: string };
@@ -51,10 +60,8 @@ export function isHistoryMessage(message: unknown): message is HistoryMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
   if (message.type === 'loadHistory') return true;
   if (!('taskId' in message) || typeof message.taskId !== 'string' || !message.taskId) return false;
-  return (message.type === 'importPlan' && 'plan' in message && typeof message.plan === 'string'
-    && message.plan.trim().length > 0 && Buffer.byteLength(message.plan, 'utf8') <= 100 * 1024)
-    || (message.type === 'completeTask' && 'outcome' in message && typeof message.outcome === 'string'
-      && Buffer.byteLength(message.outcome, 'utf8') <= 100 * 1024);
+  return message.type === 'importPlan' && 'plan' in message && typeof message.plan === 'string'
+    && message.plan.trim().length > 0 && Buffer.byteLength(message.plan, 'utf8') <= 100 * 1024;
 }
 export type PolicyDecision = {
   route: Route;
@@ -99,6 +106,9 @@ export const TaskRecordSchema = z.object({
   status: z.enum(['routed', 'planned', 'running', 'done', 'blocked']),
   outcome: z.string().optional(),
   changedFiles: z.array(z.string()).optional(),
+  workspaceUri: z.string().optional(),
+  contextSnippet: z.string().max(6000).optional(),
+  approvals: z.array(z.object({ approvedAt: z.string().datetime(), workspaceUri: z.string() })).optional(),
 });
 export type TaskRecord = z.infer<typeof TaskRecordSchema>;
 

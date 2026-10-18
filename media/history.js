@@ -1,4 +1,4 @@
-function initializeHistory(vscode) {
+function initializeHistory(vscode, taskActions) {
   const tabs = [document.getElementById('task-tab'), document.getElementById('history-tab')];
   const pane = document.getElementById('history-pane');
   const list = document.getElementById('history-list');
@@ -54,20 +54,30 @@ function initializeHistory(vscode) {
       info.textContent = `${task.route.task_type} → ${task.route.recommended_destination}\n` +
         `Research needed: ${task.route.research_needed ? 'Yes' : 'No'}\n${task.route.reason}\nDecision: ${task.decision}`;
       details.append(summary, info);
-      if (task.changedFiles?.length) {
+      if (task.changedFiles || task.status === 'done') {
         const files = document.createElement('p');
-        files.textContent = `Changed files:\n${task.changedFiles.join('\n')}`;
+        files.textContent = `Changed files:\n${task.changedFiles?.join('\n') || (task.changedFiles ? '(none)' : '(unavailable)')}`;
         details.append(files);
       }
-      const draft = drafts.get(task.id) ?? { plan: task.plan ?? '', outcome: task.outcome ?? '' };
-      drafts.set(task.id, draft);
+      if (task.outcome) {
+        const outcome = document.createElement('p');
+        outcome.textContent = `Outcome: ${task.outcome}`;
+        details.append(outcome);
+      }
+      if (task.approvals?.length) {
+        const approval = document.createElement('p');
+        approval.textContent = `Approved: ${task.approvals.map((entry) => new Date(entry.approvedAt).toLocaleString()).join(', ')}`;
+        details.append(approval);
+      }
+      if (drafts.get(task.id)?.plan === task.plan) drafts.delete(task.id);
+      const draft = drafts.get(task.id) ?? { plan: task.plan ?? '' };
       function field(name, caption) {
         const label = document.createElement('label');
         label.textContent = caption;
         const input = document.createElement('textarea');
         input.rows = name === 'plan' ? 6 : 3;
         input.value = draft[name];
-        input.addEventListener('input', () => { draft[name] = input.value; });
+        input.addEventListener('input', () => { draft[name] = input.value; drafts.set(task.id, draft); });
         label.append(input);
         details.append(label);
         return input;
@@ -84,29 +94,22 @@ function initializeHistory(vscode) {
         send({ type: 'importPlan', taskId: task.id, plan: plan.value });
       });
       details.append(importButton);
-      const outcome = field('outcome', 'Outcome (optional)');
-      if (task.status !== 'blocked') {
-        const complete = document.createElement('button');
-        complete.type = 'button';
-        complete.textContent = task.status === 'done' ? 'Save outcome' : 'Mark complete';
-        complete.addEventListener('click', () => {
-          if (new TextEncoder().encode(outcome.value).length > 100 * 1024) {
-            status.textContent = 'Keep the outcome under 100 KB.'; return;
-          }
-          send({ type: 'completeTask', taskId: task.id, outcome: outcome.value });
-        });
-        details.append(complete);
-      }
+      const controls = document.createElement('div');
+      controls.className = 'task-controls';
+      details.append(controls);
       list.append(details);
+      taskActions.render(controls, task);
     }
   }
 
   window.addEventListener('message', ({ data }) => {
+    if (data?.type === 'taskActionResult') { status.textContent = data.notice; return; }
     if (data?.type !== 'history' && data?.type !== 'historyError') return;
     busy = false;
     pane.querySelectorAll('button, textarea').forEach((input) => { input.disabled = false; });
-    if (data.type === 'historyError') { status.textContent = data.message; return; }
+    if (data.type === 'historyError') { status.textContent = data.message; taskActions.update(); return; }
     render(data.tasks);
-    status.textContent = data.notice ?? '';
+    if (data.notice) status.textContent = data.notice;
+    else if (status.textContent === 'Loading history…') status.textContent = '';
   });
 }

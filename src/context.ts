@@ -10,13 +10,13 @@ const excluded = /^(?:\.env(?:\..*)?|.*\.(?:pem|key)|id_rsa.*|credentials.*|node
 const gitExclusions = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'credentials*', 'node_modules', '.git'];
 
 export type ContextPart = { source: string; text: string };
-export type BuiltContext = { text: string; sources: string[]; parts: ContextPart[] };
+export type BuiltContext = { text: string; sources: string[]; parts: ContextPart[]; workspaceUri?: string };
 
-function allowed(filename: string): boolean {
+export function allowed(filename: string): boolean {
   return !filename.split(/[\\/]/).some((part) => excluded.test(part));
 }
 
-async function safeFile(filename: string, root: string): Promise<string | undefined> {
+export async function safeFile(filename: string, root: string): Promise<string | undefined> {
   if (!allowed(filename)) return undefined;
   try {
     const resolved = await realpath(filename);
@@ -30,16 +30,18 @@ async function safeFile(filename: string, root: string): Promise<string | undefi
   }
 }
 
-async function gitSummary(root: string, command: 'status' | 'diff'): Promise<string> {
-  // Exclude sensitive paths before Git computes output, including nested files.
-  const pathspecs = gitExclusions.flatMap((name) => [
+export function gitPathspecs(): string[] {
+  return ['.', ...gitExclusions.flatMap((name) => [
     `:(glob,icase,exclude)**/${name}`, `:(glob,icase,exclude)**/${name}/**`,
-  ]);
+  ])];
+}
+
+async function gitSummary(root: string, command: 'status' | 'diff'): Promise<string> {
   const args = command === 'status' ? ['status', '--short', '--untracked-files=all', '--no-renames']
     : ['diff', '--stat', '--no-ext-diff', '--no-textconv', '--no-renames'];
   try {
     return await new Promise<string>((resolve) => {
-      execFile('git', ['-c', 'core.quotePath=false', ...args, '--', '.', ...pathspecs], {
+      execFile('git', ['-c', 'core.quotePath=false', ...args, '--', ...gitPathspecs()], {
         cwd: root, timeout: 3000, maxBuffer: MAX_FILE_BYTES, windowsHide: true, encoding: 'utf8',
       }, (error, stdout) => resolve(error ? '' : stdout.trim()));
     });
@@ -100,5 +102,6 @@ export async function buildContext(task: string): Promise<BuiltContext> {
     // Put relevant memories first so the final character cap keeps prior plans.
     parts.push(...workspaceParts);
   } catch { /* Memory is optional. */ }
-  return { text: parts.map((part) => part.text).join('\n\n'), sources: parts.map((part) => part.source), parts };
+  return { text: parts.map((part) => part.text).join('\n\n'), sources: parts.map((part) => part.source), parts,
+    workspaceUri: folder?.uri.scheme === 'file' ? folder.uri.toString() : undefined };
 }

@@ -46,8 +46,10 @@
       <div id="handoff-buttons">
         <button id="plan-chatgpt" type="button">Plan in ChatGPT</button>
         <button id="plan-gemini" type="button">Plan in Gemini</button>
-        <button id="run-codex" type="button" disabled title="Coming soon">Run in Codex</button>
       </div>
+      <div id="task-controls" class="task-controls"></div>
+      <p id="task-status" role="status" aria-live="polite"></p>
+      <p id="task-outcome"></p>
       <div id="plan-section" hidden>
         <label for="plan-text">Paste the plan here</label>
         <textarea id="plan-text" rows="8" placeholder="Paste the implementation plan you received…"></textarea>
@@ -65,6 +67,7 @@
     <p id="history-status" role="status" aria-live="polite"></p>
     <div id="history-list"></div>
   </section>
+  <script nonce="{{nonce}}" src="{{actionsUri}}"></script>
   <script nonce="{{nonce}}" src="{{historyUri}}"></script>
   <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
 </body>
