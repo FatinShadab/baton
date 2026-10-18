@@ -9,8 +9,10 @@ extension storage.
 
 ## Five-step live demo
 
-1. Open [`demo-repo`](demo-repo) as the VS Code workspace and run `npm test` in
-   its terminal. The single date parser test fails.
+1. Open this Baton repository in VS Code and press **F5**. The **Run Baton**
+   launch profile builds the extension and opens an **Extension Development
+   Host** with [`demo-repo`](demo-repo) as its workspace. Run `npm test` in the
+   new window's terminal; the single date parser test fails.
 2. Open the Baton sidebar, click **Demo task** (or enter “Fix the failing test in
    the date parser”), then click **Prepare context**. Review the selected sources
    under **What will be shared**; deselect anything you do not want to send.
@@ -36,8 +38,14 @@ npm install -g @openai/codex
 codex
 ```
 
-Launch the extension in a VS Code Extension Development Host. In the Command
-Palette, run **Baton: Set API Keys** to save `GEMINI_API_KEY` and
+For local debugging, open this repository folder in VS Code and press **F5**
+(or choose **Run Baton** in Run and Debug). Its prelaunch task runs `npm run
+build`; the new Extension Development Host opens `demo-repo`. Click the Baton
+activity-bar icon there to open the sidebar. After changing TypeScript or
+webview files, run `npm run build` in the source window, then press **Ctrl+R**
+in the Development Host to reload the updated extension. On macOS use **Cmd+R**.
+
+In the Command Palette, run **Baton: Set API Keys** to save `GEMINI_API_KEY` and
 `OLLAMA_API_KEY` in VS Code SecretStorage. Leave a prompt empty to keep its
 existing key. Keys are optional; with no working provider, routing uses rules.
 Voice transcription also asks for an `ELEVENLABS_API_KEY` through this command.
@@ -67,6 +75,21 @@ and their expected risk tiers are in [`scripts/eval.ts`](scripts/eval.ts).
   Code terminal with policy-required confirmation. `src/history.ts` records
   plans, approvals, status, and outcomes. `src/voice.ts` handles speech input.
 - **Build:** esbuild bundles the TypeScript extension into `dist/extension.js`.
+
+## Read-only MCP server
+
+`npm run build` also creates `out/mcp.js`, a stdio MCP server. Run **Baton: Copy
+MCP Config** from the Command Palette to copy a ready-to-paste `mcpServers` JSON
+snippet for the current workspace. The snippet sets `BATON_MEMORY_PATH` to the
+extension's local `memory.json` and `BATON_PROJECT_ROOT` to the workspace folder.
+The server reads `tasks.json` beside `memory.json` for the latest task whose
+status is `planned`.
+
+The tools are `get_project_overview` (README introduction and file tree to depth 2),
+`search_project_context(query)` (MiniSearch over saved memory), and
+`get_active_plan` (latest saved planned task). They read current JSON on every
+call and never modify it. VS Code versions with the MCP server provider API also
+discover the server automatically; older versions can use the copied snippet.
 
 ## Honest limits
 

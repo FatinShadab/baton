@@ -8,3 +8,4 @@ esbuild.mjs
 package-lock.json
 .gitignore
 dist/**/*.map
+out/**/*.map

@@ -11,6 +11,7 @@ import { TaskHistory } from './history';
 import { planExternal, readClipboard } from './handoff';
 import { FallbackServerSession, initVoice, startVoiceFallbackServer, transcribe } from './voice';
 import { CodexRunner } from './codex';
+import { copyMcpConfig, registerMcpProvider } from './mcp/config';
 
 export function activate(context: vscode.ExtensionContext): { store: JsonStore; memory: MemoryStore } {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
@@ -20,6 +21,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
   const codex = new CodexRunner(store, history);
 
   initVoice(context.secrets);
+  registerMcpProvider(context);
 
   let activeWebviewView: vscode.WebviewView | undefined;
   let pendingDemoTask: string | undefined;
@@ -38,6 +40,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
     codex,
     initializeRouter(context.secrets),
     vscode.commands.registerCommand('baton.setKeys', () => setKeys(context.secrets)),
+    vscode.commands.registerCommand('baton.copyMcpConfig', () => copyMcpConfig(context)),
     vscode.commands.registerCommand('baton.focus', async () => {
       try {
         await vscode.commands.executeCommand('baton.panel.focus');

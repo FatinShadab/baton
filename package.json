@@ -12,7 +12,8 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onView:baton.panel"
+    "onView:baton.panel",
+    "onCommand:baton.copyMcpConfig"
   ],
   "contributes": {
     "commands": [
@@ -27,6 +28,10 @@
       {
         "command": "baton.demo",
         "title": "Baton: Load Demo Task"
+      },
+      {
+        "command": "baton.copyMcpConfig",
+        "title": "Baton: Copy MCP Config"
       }
     ],
     "viewsContainers": {
@@ -38,6 +43,12 @@
         }
       ]
     },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "baton.local-context",
+        "label": "Baton local context"
+      }
+    ],
     "views": {
       "baton": [
         {
@@ -63,6 +74,7 @@
   },
   "dependencies": {
     "@google/genai": "1.0.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "minisearch": "^7.2.0",
     "zod": "^3.25.76"
   }

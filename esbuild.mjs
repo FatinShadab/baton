@@ -1,23 +1,24 @@
 import * as esbuild from 'esbuild';
 
-const options = {
-  entryPoints: ['src/extension.ts'],
-  outfile: 'dist/extension.js',
+const base = {
   bundle: true,
   platform: 'node',
   format: 'cjs',
   target: 'node18',
-  external: ['vscode'],
   sourcemap: true,
   logLevel: 'info',
 };
+const entries = [
+  { ...base, entryPoints: ['src/extension.ts'], outfile: 'dist/extension.js', external: ['vscode'] },
+  { ...base, entryPoints: ['src/mcp/server.ts'], outfile: 'out/mcp.js' },
+];
 
 try {
   if (process.argv.includes('--watch')) {
-    const context = await esbuild.context(options);
-    await context.watch();
+    const contexts = await Promise.all(entries.map((options) => esbuild.context(options)));
+    await Promise.all(contexts.map((context) => context.watch()));
   } else {
-    await esbuild.build(options);
+    await Promise.all(entries.map((options) => esbuild.build(options)));
   }
 } catch {
   process.exitCode = 1;
