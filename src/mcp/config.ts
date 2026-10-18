@@ -8,7 +8,7 @@ type McpApi = {
     id: string, provider: { provideMcpServerDefinitions: () => McpDefinition[] },
   ) => vscode.Disposable };
   McpStdioServerDefinition?: new (
-    options: { label: string; command: string; args: string[]; env: Record<string, string>; cwd: vscode.Uri },
+    label: string, command: string, args?: string[], env?: Record<string, string>,
   ) => McpDefinition;
 };
 
@@ -44,7 +44,8 @@ export function registerMcpProvider(context: vscode.ExtensionContext): void {
     context.subscriptions.push(api.lm.registerMcpServerDefinitionProvider(PROVIDER_ID, {
       provideMcpServerDefinitions: () => {
         const { command, args, env, cwd } = serverOptions(context);
-        const definition = new api.McpStdioServerDefinition!({ label: 'Baton project context', command, args, env, cwd });
+        const definition = new api.McpStdioServerDefinition!('Baton project context', command, args, env);
+        definition.cwd = cwd;
         return [definition];
       },
     }));

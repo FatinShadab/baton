@@ -181,11 +181,11 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   pointer-events: none;
   user-select: none;
   z-index: 0;
-  opacity: 0.07;
+  opacity: 0.13;
   color: var(--vscode-foreground);
   text-align: center;
   transition: opacity var(--baton-transition);
@@ -208,6 +208,20 @@ body {
   letter-spacing: 2px;
   text-transform: uppercase;
   line-height: 1;
+}
+
+.watermark-tagline {
+  max-width: min(260px, 80vw);
+  margin-top: 4px;
+  font-size: clamp(14px, 5vw, 18px);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
+.watermark-tagline em {
+  font-style: italic;
+  font-weight: 700;
 }
 
 /* Form & Input Elements */
