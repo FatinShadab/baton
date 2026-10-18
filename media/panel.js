@@ -11,10 +11,6 @@
   const preview = document.getElementById('context-preview');
   const sourceList = document.getElementById('context-sources');
   const refresh = document.getElementById('refresh-context');
-  const planChatgpt = document.getElementById('plan-chatgpt');
-  const planGemini = document.getElementById('plan-gemini');
-  const planClaude = document.getElementById('plan-claude');
-  const planAntigravity = document.getElementById('plan-antigravity');
   const planSection = document.getElementById('plan-section');
   const planText = document.getElementById('plan-text');
   const savePlanBtn = document.getElementById('save-plan');
@@ -329,14 +325,6 @@
   // Message Handling
   // ---------------------------------------------------------------------------
   window.addEventListener('message', ({ data }) => {
-    if (data?.type === 'handoffAvailability') {
-      planChatgpt.textContent = data.installed?.chatgpt ? '💬 Plan in Codex' : '💬 Plan in ChatGPT';
-      planChatgpt.title = data.installed?.chatgpt ? 'Open the Codex extension with the prompt copied' : 'Open ChatGPT in a browser with the prompt copied';
-      planClaude.hidden = !data.installed?.claude;
-      planAntigravity.hidden = !data.installed?.antigravity;
-      planAntigravity.title = 'Open Antigravity with the prompt copied for pasting';
-      return;
-    }
     if (data?.type === 'handoffResult') {
       planStatus.textContent = data.notice || '';
       showToast(data.notice || 'Prompt ready.', 'info', 4000);
@@ -501,9 +489,10 @@
     if (data?.type !== 'routed' || !data.decision?.route) return;
 
     currentTaskId = data.taskId || '';
+    vscode.postMessage({ type: 'handoffAvailabilityRequest' });
     submit.disabled = false;
     submit.textContent = 'Route task';
-    status.textContent = (data.saved ? 'Saved to memory. Choose handoff below or run via Codex.'
+    status.textContent = (data.saved ? 'Saved to memory. Choose a destination below.'
       : 'Route ready, but local memory could not be saved.') + (data.notice ? ` ${data.notice}` : '');
 
     if (data.text !== task.value) return;
@@ -573,18 +562,6 @@
       showToast(`Routed via ${tiers[data.tier] ?? data.tier}. Risk: ${route.risk_tier}.`, 'info', 3000);
     }
   });
-
-  // ---------------------------------------------------------------------------
-  // External Planning Handoff
-  // ---------------------------------------------------------------------------
-  for (const [button, target] of [[planChatgpt, 'chatgpt'], [planGemini, 'gemini'],
-    [planClaude, 'claude'], [planAntigravity, 'antigravity']]) {
-    button.addEventListener('click', () => {
-      if (!currentTaskId) return;
-      planSection.hidden = false;
-      vscode.postMessage({ type: 'planExternal', target, taskId: currentTaskId });
-    });
-  }
 
   useClipboardBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'readClipboard' });

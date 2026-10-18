@@ -808,29 +808,6 @@ body.vscode-light .override-title,
   margin-bottom: 8px;
 }
 
-/* Handoff Buttons */
-#handoff-buttons {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.btn-handoff {
-  margin-top: 0;
-  padding: 7px 8px;
-  font-size: 11.5px;
-  background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.15));
-  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
-  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
-  border-radius: var(--baton-radius-sm);
-}
-
-.btn-handoff[hidden] { display: none; }
-
-.btn-handoff:hover {
-  background: var(--vscode-button-secondaryHoverBackground, rgba(127, 127, 127, 0.25));
-}
-
 /* Plan Section */
 #plan-section textarea {
   margin-top: 4px;
@@ -850,12 +827,27 @@ body.vscode-light .override-title,
 /* Task Execution Controls */
 .task-controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+  align-items: end;
 }
 
+.task-controls label { min-width: 0; font-size: 11px; font-weight: 600; }
+.task-controls select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 7px 8px;
+  color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+  background: var(--vscode-dropdown-background, var(--vscode-input-background));
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border));
+  border-radius: var(--baton-radius-sm);
+  font: inherit;
+  font-size: 11.5px;
+}
 .task-controls button {
   margin: 0;
+  width: auto;
   font-size: 11.5px;
   padding: 6px 8px;
 }
@@ -925,6 +917,8 @@ body.vscode-light .override-title,
 .history-entry .task-controls {
   margin-top: 10px;
 }
+
+.history-entry .task-controls button { width: auto; }
 
 /* ==========================================================================
    Friendly Error & Status Toasts

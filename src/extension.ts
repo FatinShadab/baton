@@ -11,6 +11,7 @@ import { TaskHistory } from './history';
 import { handoffAvailability, planExternal, readClipboard } from './handoff';
 import { FallbackServerSession, initVoice, startVoiceFallbackServer, transcribe } from './voice';
 import { CodexRunner } from './codex';
+import { codexAvailable } from './terminal';
 import { copyMcpConfig, registerMcpProvider, serverOptions } from './mcp/config';
 import { McpSession } from './mcp/session';
 import { ensureMcpAgentInstructions } from './mcp/agents';
@@ -23,6 +24,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
   const history = new TaskHistory(store, memory);
   const codex = new CodexRunner(store, history, context.extensionUri, context.extensionMode);
   const mcp = new McpSession(context);
+
+  const availableDestinations = async () => ({
+    ...handoffAvailability(),
+    codex: await codexAvailable(vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri.fsPath ?? process.cwd()),
+  });
 
   initVoice(context.secrets);
   registerMcpProvider(context);
@@ -128,7 +134,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
                 const text = await readClipboard();
                 await view.webview.postMessage({ type: 'clipboardContent', text });
               } else if (message.type === 'handoffAvailabilityRequest') {
-                await view.webview.postMessage({ type: 'handoffAvailability', installed: handoffAvailability() });
+                await view.webview.postMessage({ type: 'handoffAvailability', installed: await availableDestinations() });
               } else if (message.type === 'planExternal') {
                 let text = lastRouted?.taskId === message.taskId ? lastRouted.text : '';
                 const snippet = lastRouted?.taskId === message.taskId ? lastRouted.snippet : '';
@@ -226,10 +232,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
           }
         });
         const extensionListener = vscode.extensions.onDidChange(() => {
-          try {
-            void view.webview.postMessage({ type: 'handoffAvailability', installed: handoffAvailability() })
-              .then(undefined, () => { /* closed */ });
-          } catch { /* closed */ }
+          void availableDestinations().then(async (installed) => {
+            try { await view.webview.postMessage({ type: 'handoffAvailability', installed }); } catch { /* closed */ }
+          }, () => { /* closed */ });
         });
         view.onDidDispose(() => {
           if (activeWebviewView === view) {

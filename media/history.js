@@ -31,7 +31,10 @@ function initializeHistory(vscode, taskActions) {
       tab.tabIndex = i === index ? 0 : -1;
       document.getElementById(tab.getAttribute('aria-controls')).hidden = i !== index;
     });
-    if (index === 1) send({ type: 'loadHistory' });
+    if (index === 1) {
+      vscode.postMessage({ type: 'handoffAvailabilityRequest' });
+      send({ type: 'loadHistory' });
+    }
   }
 
   tabs.forEach((tab, index) => {
