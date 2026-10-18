@@ -1,4 +1,5 @@
 import type { Disposable, SecretStorage } from 'vscode';
+import { createHash } from 'node:crypto';
 import { RouteSchema, RouterResult } from '../types';
 import { routeGemma } from './gemma';
 import { routeOllama } from './ollama';
@@ -22,7 +23,9 @@ export function initializeRouter(secrets: SecretStorage): Disposable {
 }
 
 export async function routeTask(task: string, ctxSnippet: string): Promise<RouterResult> {
-  const cached = cache.get(task);
+  // A changed sharing selection must not reuse a route based on excluded context.
+  const cacheKey = createHash('sha256').update(JSON.stringify([task, ctxSnippet])).digest('hex');
+  const cached = cache.get(cacheKey);
   if (cached) return { route: { ...cached.route }, tier: cached.tier };
   const startedGeneration = generation;
   let result: RouterResult | undefined;
@@ -42,7 +45,7 @@ export async function routeTask(task: string, ctxSnippet: string): Promise<Route
   result ??= { route: RouteSchema.parse(classify(task)), tier: 'rules' };
   if (startedGeneration === generation) {
     if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value!);
-    cache.set(task, { route: { ...result.route }, tier: result.tier });
+    cache.set(cacheKey, { route: { ...result.route }, tier: result.tier });
   }
   return result;
 }

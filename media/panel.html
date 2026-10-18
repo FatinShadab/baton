@@ -12,7 +12,15 @@
   <form id="task-form">
     <label for="task">Coding task</label>
     <textarea id="task" rows="8" placeholder="What would you like to build?" required></textarea>
-    <button type="submit">Route task</button>
+    <button type="submit">Prepare context</button>
+    <details id="context-preview" hidden>
+      <summary>What will be shared</summary>
+      <p>The task above and the selected context below will be sent when you route.</p>
+      <div id="context-sources"></div>
+      <p id="context-size"></p>
+      <pre id="context-text"></pre>
+      <button id="refresh-context" type="button">Refresh context</button>
+    </details>
   </form>
   <section id="result" role="status" aria-live="polite" aria-atomic="true">
     <p id="routing-status"></p>

@@ -5,25 +5,100 @@
   const card = document.getElementById('route-card');
   const submit = form.querySelector('button[type="submit"]');
   const status = document.getElementById('routing-status');
+  const preview = document.getElementById('context-preview');
+  const sourceList = document.getElementById('context-sources');
+  const refresh = document.getElementById('refresh-context');
+  let requestId = 0;
+  let ready = false;
+  let parts = [];
+  let limit = 6000;
+  const selected = new Set();
   const tiers = { gemma: 'via Gemma (AI Studio)', ollama: 'via Ollama', rules: 'via rules' };
   task.value = vscode.getState()?.task ?? '';
 
   task.addEventListener('input', () => {
     vscode.setState({ task: task.value });
     card.hidden = true;
+    requestId++;
+    ready = false;
+    preview.hidden = true;
+    submit.disabled = false;
+    refresh.disabled = false;
+    submit.textContent = 'Prepare context';
+    status.textContent = '';
   });
+
+  function updatePreview() {
+    const text = parts.filter((part) => selected.has(part.source)).map((part) => part.text).join('\n\n');
+    document.getElementById('context-text').textContent = text.slice(0, limit);
+    document.getElementById('context-size').textContent =
+      `${Math.min(text.length, limit)} context characters will be shared` +
+      (text.length > limit ? ` (trimmed from ${text.length}).` : '.');
+  }
+
+  function prepareContext() {
+    if (!task.value.trim()) return;
+    ready = false;
+    preview.hidden = true;
+    submit.disabled = true;
+    refresh.disabled = true;
+    card.hidden = true;
+    status.textContent = 'Preparing local context…';
+    vscode.postMessage({ type: 'previewContext', text: task.value, requestId: ++requestId });
+  }
+  refresh.addEventListener('click', prepareContext);
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     if (!task.value.trim() || submit.disabled) return;
+    if (!ready) {
+      prepareContext();
+      return;
+    }
     submit.disabled = true;
+    refresh.disabled = true;
+    sourceList.querySelectorAll('input').forEach((input) => { input.disabled = true; });
     card.hidden = true;
     status.textContent = 'Routing task…';
-    vscode.postMessage({ type: 'routeTask', text: task.value });
+    vscode.postMessage({ type: 'routeTask', text: task.value, requestId, sources: [...selected] });
   });
   window.addEventListener('message', ({ data }) => {
+    if (data?.requestId !== requestId) return;
+    if (data.type === 'contextPreview') {
+      parts = data.parts;
+      limit = data.limit;
+      selected.clear();
+      sourceList.replaceChildren();
+      for (const part of parts) {
+        selected.add(part.source);
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) selected.add(part.source);
+          else selected.delete(part.source);
+          card.hidden = true;
+          updatePreview();
+        });
+        label.append(checkbox, document.createTextNode(` ${part.source} — ${part.text.length} chars`));
+        sourceList.append(label);
+      }
+      if (!parts.length) sourceList.textContent = 'No eligible context sources. Only your task will be shared.';
+      ready = true;
+      submit.disabled = false;
+      refresh.disabled = false;
+      submit.textContent = 'Route task';
+      preview.hidden = false;
+      preview.open = true;
+      status.textContent = 'Review the sources, then route your task.';
+      updatePreview();
+      return;
+    }
+    refresh.disabled = false;
+    sourceList.querySelectorAll('input').forEach((input) => { input.disabled = false; });
     if (data?.type === 'routeError') {
       submit.disabled = false;
-      status.textContent = 'Could not route this task. Please try again.';
+      status.textContent = 'Could not prepare or route this task. Please try again.';
       return;
     }
     if (data?.type !== 'routed' || !data.decision?.route) return;

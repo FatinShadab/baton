@@ -47,3 +47,8 @@ dt { margin-top: 10px; font-weight: 600; }
 dd { margin: 4px 0 0; white-space: pre-wrap; }
 #action { font-weight: 700; }
 #policy-why { margin-bottom: 0; }
+#context-preview { margin-top: 16px; overflow-wrap: anywhere; }
+#context-preview summary { cursor: pointer; font-weight: 600; }
+#context-sources label { display: flex; align-items: baseline; gap: 6px; }
+#context-sources input { flex-shrink: 0; }
+#context-text { white-space: pre-wrap; max-height: 240px; overflow: auto; font-size: 12px; }

@@ -1,4 +1,8 @@
-export type PanelMessage = { type: 'routeTask'; text: string };
+import type { ContextPart } from './context';
+
+export type PanelMessage =
+  | { type: 'previewContext'; text: string; requestId: number }
+  | { type: 'routeTask'; text: string; requestId: number; sources: string[] };
 export type PolicyDecision = {
   route: Route;
   action: 'RUN' | 'CONFIRM' | 'MANUAL_ONLY' | 'BLOCK';
@@ -7,13 +11,18 @@ export type PolicyDecision = {
 export type RouterTier = 'gemma' | 'ollama' | 'rules';
 export type RouterResult = { route: Route; tier: RouterTier };
 export type ExtensionMessage =
-  | { type: 'routed'; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean }
-  | { type: 'routeError' };
+  | { type: 'contextPreview'; requestId: number; parts: ContextPart[]; limit: number }
+  | { type: 'routed'; requestId: number; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean }
+  | { type: 'routeError'; requestId: number };
 
 export function isPanelMessage(message: unknown): message is PanelMessage {
-  return typeof message === 'object' && message !== null
-    && 'type' in message && message.type === 'routeTask'
-    && 'text' in message && typeof message.text === 'string';
+  if (typeof message !== 'object' || message === null
+    || !('text' in message) || typeof message.text !== 'string'
+    || !('requestId' in message) || !Number.isSafeInteger(message.requestId)
+    || !('type' in message)) return false;
+  return message.type === 'previewContext' || (message.type === 'routeTask'
+    && 'sources' in message && Array.isArray(message.sources)
+    && message.sources.every((source: unknown) => typeof source === 'string'));
 }
 import { z } from 'zod';
 

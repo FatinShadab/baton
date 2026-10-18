@@ -5,6 +5,7 @@ import { JsonStore } from './store';
 import { initializeRouter, routeTask } from './router';
 import { decide } from './policy';
 import { ExtensionMessage, isPanelMessage } from './types';
+import { buildContext, BuiltContext, MAX_CONTEXT_CHARS, selectContext } from './context';
 
 export function activate(context: vscode.ExtensionContext): { store: JsonStore } {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
@@ -24,12 +25,27 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore }
     vscode.window.registerWebviewViewProvider('baton.panel', {
       async resolveWebviewView(view) {
         view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
+        let preview: { requestId: number; text: string; context: BuiltContext } | undefined;
+        let latestPreview = 0;
         const listener = view.webview.onDidReceiveMessage(async (message: unknown) => {
           if (!isPanelMessage(message)) return;
           let reply: ExtensionMessage;
           try {
-            // Context collection is separate; routing does not read workspace files.
-            const { route, tier } = await routeTask(message.text, '');
+            if (message.type === 'previewContext') {
+              const generation = ++latestPreview;
+              preview = undefined;
+              const collected = await buildContext(message.text);
+              if (generation !== latestPreview) return;
+              preview = { requestId: message.requestId, text: message.text, context: collected };
+              await view.webview.postMessage({ type: 'contextPreview', requestId: message.requestId,
+                parts: collected.parts, limit: MAX_CONTEXT_CHARS } satisfies ExtensionMessage);
+              return;
+            }
+            if (!preview || preview.requestId !== message.requestId || preview.text !== message.text) {
+              throw new Error('Prepare a context preview before routing.');
+            }
+            const snippet = selectContext(preview.context, message.sources);
+            const { route, tier } = await routeTask(message.text, snippet);
             const decision = decide(route, message.text);
             const saved = await store.appendTask({
               id: randomUUID(),
@@ -40,9 +56,9 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore }
               decision: decision.action,
               status: decision.action === 'BLOCK' ? 'blocked' : 'routed',
             });
-            reply = { type: 'routed', text: message.text, decision, tier, saved };
+            reply = { type: 'routed', requestId: message.requestId, text: message.text, decision, tier, saved };
           } catch {
-            reply = { type: 'routeError' };
+            reply = { type: 'routeError', requestId: message.requestId };
           }
           try {
             await view.webview.postMessage(reply);
