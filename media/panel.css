@@ -52,3 +52,11 @@ dd { margin: 4px 0 0; white-space: pre-wrap; }
 #context-sources label { display: flex; align-items: baseline; gap: 6px; }
 #context-sources input { flex-shrink: 0; }
 #context-text { white-space: pre-wrap; max-height: 240px; overflow: auto; font-size: 12px; }
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tabs button { margin-top: 0; }
+.tabs [aria-selected="false"] { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+.history-entry { margin-top: 12px; padding: 10px; border: 1px solid var(--vscode-panel-border); overflow-wrap: anywhere; }
+.history-entry summary { cursor: pointer; white-space: pre-wrap; }
+.history-entry p { white-space: pre-wrap; }
+.history-entry label { margin-top: 14px; }
+.history-entry textarea { margin-top: 6px; }

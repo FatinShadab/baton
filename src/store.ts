@@ -80,4 +80,15 @@ export class JsonStore {
   appendTask(task: TaskRecord): Promise<boolean> {
     return this.append('tasks.json', TaskRecordSchema, task);
   }
+
+  updateTask(id: string, update: (task: TaskRecord) => TaskRecord): Promise<TaskRecord | undefined> {
+    return this.enqueue(async () => {
+      const tasks = await this.readFile('tasks.json', TasksSchema, []);
+      const index = tasks.findIndex((task) => task.id === id);
+      if (index < 0) throw new Error('Task not found');
+      tasks[index] = TaskRecordSchema.parse(update(tasks[index]));
+      await this.writeFile('tasks.json', TasksSchema, tasks);
+      return tasks[index];
+    });
+  }
 }

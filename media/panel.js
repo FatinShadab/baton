@@ -1,5 +1,6 @@
 (() => {
   const vscode = acquireVsCodeApi();
+  initializeHistory(vscode);
   const form = document.getElementById('task-form');
   const task = document.getElementById('task');
   const card = document.getElementById('route-card');
@@ -62,6 +63,11 @@
     vscode.postMessage({ type: 'routeTask', text: task.value, requestId, sources: [...selected] });
   });
   window.addEventListener('message', ({ data }) => {
+    if (data?.type === 'history' && data.changed) {
+      // A newly imported plan must be included in a fresh context snapshot.
+      task.dispatchEvent(new Event('input'));
+      return;
+    }
     if (data?.requestId !== requestId) return;
     if (data.type === 'contextPreview') {
       parts = data.parts;
@@ -103,7 +109,8 @@
     }
     if (data?.type !== 'routed' || !data.decision?.route) return;
     submit.disabled = false;
-    status.textContent = data.saved ? '' : 'Route ready, but local memory could not be saved.';
+    status.textContent = data.saved ? 'Saved. Open History to import a plan or mark this task complete.'
+      : 'Route ready, but local memory could not be saved.';
     if (data.text !== task.value) return;
     const { route, action, why } = data.decision;
     if (!['low', 'moderate', 'high'].includes(route.risk_tier)) return;

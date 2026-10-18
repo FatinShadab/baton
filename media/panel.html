@@ -9,6 +9,11 @@
 </head>
 <body>
   <h1>Baton</h1>
+  <div class="tabs" role="tablist" aria-label="Baton views">
+    <button id="task-tab" type="button" role="tab" aria-selected="true" aria-controls="task-pane">Task</button>
+    <button id="history-tab" type="button" role="tab" aria-selected="false" aria-controls="history-pane" tabindex="-1">History</button>
+  </div>
+  <section id="task-pane" role="tabpanel" aria-labelledby="task-tab">
   <form id="task-form">
     <label for="task">Coding task</label>
     <textarea id="task" rows="8" placeholder="What would you like to build?" required></textarea>
@@ -37,6 +42,13 @@
       <p id="policy-why"></p>
     </article>
   </section>
+  </section>
+  <section id="history-pane" role="tabpanel" aria-labelledby="history-tab" hidden>
+    <button id="refresh-history" type="button">Refresh history</button>
+    <p id="history-status" role="status" aria-live="polite"></p>
+    <div id="history-list"></div>
+  </section>
+  <script nonce="{{nonce}}" src="{{historyUri}}"></script>
   <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
 </body>
 </html>

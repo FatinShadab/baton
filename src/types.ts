@@ -3,6 +3,23 @@ import type { ContextPart } from './context';
 export type PanelMessage =
   | { type: 'previewContext'; text: string; requestId: number }
   | { type: 'routeTask'; text: string; requestId: number; sources: string[] };
+export type HistoryMessage =
+  | { type: 'loadHistory' }
+  | { type: 'importPlan'; taskId: string; plan: string }
+  | { type: 'completeTask'; taskId: string; outcome: string };
+export type HistoryReply =
+  | { type: 'history'; tasks: TaskRecord[]; notice?: string; changed: boolean }
+  | { type: 'historyError'; message: string };
+
+export function isHistoryMessage(message: unknown): message is HistoryMessage {
+  if (typeof message !== 'object' || message === null || !('type' in message)) return false;
+  if (message.type === 'loadHistory') return true;
+  if (!('taskId' in message) || typeof message.taskId !== 'string' || !message.taskId) return false;
+  return (message.type === 'importPlan' && 'plan' in message && typeof message.plan === 'string'
+    && message.plan.trim().length > 0 && Buffer.byteLength(message.plan, 'utf8') <= 100 * 1024)
+    || (message.type === 'completeTask' && 'outcome' in message && typeof message.outcome === 'string'
+      && Buffer.byteLength(message.outcome, 'utf8') <= 100 * 1024);
+}
 export type PolicyDecision = {
   route: Route;
   action: 'RUN' | 'CONFIRM' | 'MANUAL_ONLY' | 'BLOCK';

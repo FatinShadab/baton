@@ -4,13 +4,16 @@ import { setKeys } from './secrets';
 import { JsonStore } from './store';
 import { initializeRouter, routeTask } from './router';
 import { decide } from './policy';
-import { ExtensionMessage, isPanelMessage } from './types';
+import { ExtensionMessage, isHistoryMessage, isPanelMessage } from './types';
 import { buildContext, BuiltContext, MAX_CONTEXT_CHARS, selectContext } from './context';
+import { initializeMemory, MemoryStore } from './memory';
+import { TaskHistory } from './history';
 
-export function activate(context: vscode.ExtensionContext): { store: JsonStore } {
+export function activate(context: vscode.ExtensionContext): { store: JsonStore; memory: MemoryStore } {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
   const store = new JsonStore(context.globalStorageUri);
-  void store.loadTasks();
+  const memory = initializeMemory(store);
+  const history = new TaskHistory(store, memory);
 
   context.subscriptions.push(
     initializeRouter(context.secrets),
@@ -28,6 +31,12 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore }
         let preview: { requestId: number; text: string; context: BuiltContext } | undefined;
         let latestPreview = 0;
         const listener = view.webview.onDidReceiveMessage(async (message: unknown) => {
+          if (isHistoryMessage(message)) {
+            try {
+              await view.webview.postMessage(await history.handle(message));
+            } catch { /* A closed sidebar can no longer receive messages. */ }
+            return;
+          }
           if (!isPanelMessage(message)) return;
           let reply: ExtensionMessage;
           try {
@@ -74,6 +83,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore }
             nonce: randomBytes(16).toString('hex'),
             cspSource: view.webview.cspSource,
             scriptUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'panel.js')).toString(),
+            historyUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'history.js')).toString(),
             styleUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'panel.css')).toString(),
           };
           view.webview.html = Buffer.from(template).toString('utf8').replace(
@@ -85,5 +95,5 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore }
       },
     }),
   );
-  return { store };
+  return { store, memory };
 }

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import * as path from 'node:path';
-import { searchMemory } from './memory';
+import { search } from './memory';
 
 const MAX_FILE_BYTES = 100 * 1024;
 export const MAX_CONTEXT_CHARS = 6000;
@@ -92,9 +92,13 @@ export async function buildContext(task: string): Promise<BuiltContext> {
     }
   } catch { /* Workspace failures must not prevent routing. */ }
   try {
-    for (const hit of (await searchMemory(task, 5)).slice(0, 5)) {
+    const hits = await search(task, 5);
+    const workspaceParts = parts.splice(0);
+    for (const hit of hits) {
       if (allowed(hit.source) && Buffer.byteLength(hit.text, 'utf8') <= MAX_FILE_BYTES) add(hit.source, hit.text);
     }
+    // Put relevant memories first so the final character cap keeps prior plans.
+    parts.push(...workspaceParts);
   } catch { /* Memory is optional. */ }
   return { text: parts.map((part) => part.text).join('\n\n'), sources: parts.map((part) => part.source), parts };
 }

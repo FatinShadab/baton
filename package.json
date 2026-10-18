@@ -58,6 +58,7 @@
   },
   "dependencies": {
     "@google/genai": "1.0.0",
+    "minisearch": "^7.2.0",
     "zod": "^3.25.76"
   }
 }
