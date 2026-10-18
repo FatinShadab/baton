@@ -29,3 +29,20 @@ button {
 button:hover { background: var(--vscode-button-hoverBackground); }
 textarea:focus, button:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
 #result { white-space: pre-wrap; overflow-wrap: anywhere; }
+#route-card {
+  margin-top: 20px;
+  padding: 12px;
+  border: 1px solid var(--vscode-panel-border, var(--vscode-foreground));
+  border-radius: 6px;
+  white-space: normal;
+}
+h2 { margin: 0 0 12px; font-size: 16px; }
+.risk { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; }
+.risk-low { background: #216e39; color: #fff; }
+.risk-moderate { background: #ffc44d; color: #201600; }
+.risk-high { background: #b42332; color: #fff; }
+dl { margin: 0; }
+dt { margin-top: 10px; font-weight: 600; }
+dd { margin: 4px 0 0; white-space: pre-wrap; }
+#action { font-weight: 700; }
+#policy-why { margin-bottom: 0; }

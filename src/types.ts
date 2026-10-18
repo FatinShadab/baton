@@ -1,5 +1,10 @@
 export type PanelMessage = { type: 'routeTask'; text: string };
-export type ExtensionMessage = { type: 'received'; text: string };
+export type PolicyDecision = {
+  route: Route;
+  action: 'RUN' | 'CONFIRM' | 'MANUAL_ONLY' | 'BLOCK';
+  why: string;
+};
+export type ExtensionMessage = { type: 'routed'; decision: PolicyDecision };
 
 export function isPanelMessage(message: unknown): message is PanelMessage {
   return typeof message === 'object' && message !== null

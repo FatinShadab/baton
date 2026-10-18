@@ -14,7 +14,19 @@
     <textarea id="task" rows="8" placeholder="What would you like to build?" required></textarea>
     <button type="submit">Route task</button>
   </form>
-  <p id="result" role="status" aria-live="polite"></p>
+  <section id="result" role="status" aria-live="polite" aria-atomic="true">
+    <article id="route-card" hidden>
+      <h2>Route <span id="risk" class="risk"></span></h2>
+      <dl>
+        <dt>Type</dt><dd id="route-type"></dd>
+        <dt>Destination</dt><dd id="destination"></dd>
+        <dt>Research needed</dt><dd id="research"></dd>
+        <dt>Reason</dt><dd id="reason"></dd>
+        <dt>Policy action</dt><dd id="action"></dd>
+      </dl>
+      <p id="policy-why"></p>
+    </article>
+  </section>
   <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
 </body>
 </html>

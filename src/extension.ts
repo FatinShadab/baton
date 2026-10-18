@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
 import { setKeys } from './secrets';
 import { JsonStore } from './store';
+import { classify } from './router/rules';
+import { decide } from './policy';
 import { ExtensionMessage, isPanelMessage } from './types';
 
 export function activate(context: vscode.ExtensionContext): { store: JsonStore } {
@@ -23,7 +25,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore }
         view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
         const listener = view.webview.onDidReceiveMessage(async (message: unknown) => {
           if (!isPanelMessage(message)) return;
-          const reply: ExtensionMessage = { type: 'received', text: `received: ${message.text}` };
+          const reply: ExtensionMessage = { type: 'routed', decision: decide(classify(message.text), message.text) };
           try {
             await view.webview.postMessage(reply);
           } catch {
