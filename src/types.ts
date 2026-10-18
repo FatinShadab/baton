@@ -4,7 +4,11 @@ export type PolicyDecision = {
   action: 'RUN' | 'CONFIRM' | 'MANUAL_ONLY' | 'BLOCK';
   why: string;
 };
-export type ExtensionMessage = { type: 'routed'; decision: PolicyDecision };
+export type RouterTier = 'gemma' | 'ollama' | 'rules';
+export type RouterResult = { route: Route; tier: RouterTier };
+export type ExtensionMessage =
+  | { type: 'routed'; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean }
+  | { type: 'routeError' };
 
 export function isPanelMessage(message: unknown): message is PanelMessage {
   return typeof message === 'object' && message !== null
