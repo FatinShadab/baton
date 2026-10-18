@@ -3,16 +3,31 @@ function initializeTaskActions(vscode) {
   const pending = new Set();
   const records = new Map();
   const controls = new Map();
-  const choices = [['runCodex', 'Run in Codex'], ['markDone', 'Mark done'],
-    ['showDiff', 'Show diff'], ['runTests', 'Run tests']];
+  const choices = [
+    ['runCodex', '▶ Run in Codex'],
+    ['markDone', '✓ Mark done'],
+    ['showDiff', '🔍 Show diff'],
+    ['runTests', '🧪 Run tests'],
+  ];
 
   function update() {
     for (const [container, id] of controls) {
       if (!container.isConnected) { controls.delete(container); continue; }
       const task = records.get(id);
+      const isPendingThis = pending.has(id);
       for (const button of container.querySelectorAll('button')) {
         const type = button.dataset.action;
-        button.disabled = !task || pending.has(id) || task.saved === false
+        const choice = choices.find(([t]) => t === type);
+        const baseLabel = choice ? choice[1] : (button.textContent || '');
+
+        if (isPendingThis && button.dataset.pending === 'true') {
+          button.innerHTML = '<span class="spinner"></span> Working…';
+        } else {
+          button.textContent = baseLabel;
+          button.removeAttribute('data-pending');
+        }
+
+        button.disabled = !task || isPendingThis || task.saved === false
           || (type === 'runCodex' && (!['RUN', 'CONFIRM'].includes(task.decision)
             || task.route?.risk_tier === 'high' || ['running', 'done', 'blocked'].includes(task.status)))
           || (type === 'markDone' && task.status === 'blocked');
@@ -29,8 +44,10 @@ function initializeTaskActions(vscode) {
       button.type = 'button';
       button.textContent = label;
       button.dataset.action = type;
+      button.className = 'btn-secondary';
       button.addEventListener('click', () => {
         if (button.disabled || pending.has(task.id)) return;
+        button.dataset.pending = 'true';
         pending.add(task.id);
         update();
         vscode.postMessage({ type, taskId: task.id });
@@ -41,8 +58,9 @@ function initializeTaskActions(vscode) {
   }
 
   window.addEventListener('message', ({ data }) => {
-    if (data?.type === 'taskActionResult') pending.delete(data.taskId);
-    else if (data?.type === 'history') {
+    if (data?.type === 'taskActionResult') {
+      pending.delete(data.taskId);
+    } else if (data?.type === 'history') {
       for (const task of data.tasks) records.set(task.id, task);
     } else return;
     update();

@@ -21,6 +21,19 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
 
   initVoice(context.secrets);
 
+  let activeWebviewView: vscode.WebviewView | undefined;
+  let pendingDemoTask: string | undefined;
+
+  const DEMO_TASK = 'Add a rate limiter to the Express API with Redis fallback and migrate user session tokens';
+
+  const sendDemoTask = async (view: vscode.WebviewView, taskText: string) => {
+    try {
+      await view.webview.postMessage({ type: 'prefillDemo', text: taskText });
+    } catch {
+      // A closed sidebar can no longer receive messages.
+    }
+  };
+
   context.subscriptions.push(
     codex,
     initializeRouter(context.secrets),
@@ -32,8 +45,28 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
         void vscode.window.showErrorMessage('Baton could not open the sidebar. Please try again.');
       }
     }),
+    vscode.commands.registerCommand('baton.demo', async () => {
+      try {
+        await vscode.commands.executeCommand('baton.panel.focus');
+      } catch {
+        void vscode.window.showErrorMessage('Baton could not open the sidebar. Please try again.');
+      }
+      if (activeWebviewView) {
+        await sendDemoTask(activeWebviewView, DEMO_TASK);
+      } else {
+        pendingDemoTask = DEMO_TASK;
+      }
+    }),
     vscode.window.registerWebviewViewProvider('baton.panel', {
       async resolveWebviewView(view) {
+        activeWebviewView = view;
+        if (pendingDemoTask) {
+          const taskToDeliver = pendingDemoTask;
+          pendingDemoTask = undefined;
+          setTimeout(() => {
+            void sendDemoTask(view, taskToDeliver);
+          }, 250);
+        }
         view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
         let preview: { requestId: number; text: string; context: BuiltContext } | undefined;
         let latestPreview = 0;
@@ -165,6 +198,9 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
           }
         });
         view.onDidDispose(() => {
+          if (activeWebviewView === view) {
+            activeWebviewView = undefined;
+          }
           listener.dispose();
           if (fallbackSession) {
             fallbackSession.close();

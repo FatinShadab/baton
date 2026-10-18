@@ -1,105 +1,892 @@
-body {
-  padding: 16px;
-  color: var(--vscode-foreground);
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
+/* ==========================================================================
+   Baton — Stage Demo Theme & Panel Styles
+   Tailored for high readability on projectors in both Dark and Light themes.
+   ========================================================================== */
+
+:root {
+  --baton-radius-sm: 4px;
+  --baton-radius: 6px;
+  --baton-radius-lg: 8px;
+  --baton-radius-full: 9999px;
+  --baton-transition: 0.18s ease;
 }
-h1 { margin: 0 0 20px; font-size: 22px; }
-label { display: block; margin-bottom: 8px; }
-.task-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.task-header label { margin-bottom: 0; }
-.mic-button {
-  width: auto;
-  margin-top: 0;
-  padding: 4px 8px;
-  font-size: 13px;
-  background: var(--vscode-button-secondaryBackground, #3a3d41);
-  color: var(--vscode-button-secondaryForeground, #ffffff);
-  border-radius: 4px;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 12px 14px 28px;
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  line-height: 1.45;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Header & Demo Branding */
+.app-header {
+  margin-bottom: 12px;
+}
+
+.header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--vscode-foreground);
+}
+
+.stage-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--baton-radius-full);
+  background: var(--vscode-badge-background, rgba(127, 127, 127, 0.2));
+  color: var(--vscode-badge-foreground, var(--vscode-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Navigation Tabs */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(127, 127, 127, 0.2));
+  padding-bottom: 6px;
+}
+
+.tabs button {
+  flex: 1;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--baton-radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  transition: all var(--baton-transition);
+}
+
+.tabs button[aria-selected="true"] {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.tabs button[aria-selected="false"]:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(127, 127, 127, 0.15));
+  color: var(--vscode-foreground);
+}
+
+/* Form & Input Elements */
+.task-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.task-header-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  cursor: pointer;
 }
-.mic-button:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
-.mic-button.recording { background: #cf222e; color: #fff; }
-.mic-button.recording::after {
+
+.action-btn {
+  width: auto;
+  margin: 0;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--baton-radius-sm);
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+  background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.15));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--baton-transition);
+}
+
+.action-btn:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(127, 127, 127, 0.25));
+}
+
+.demo-btn {
+  color: var(--vscode-textLink-foreground, #3794ff);
+}
+
+.mic-btn.recording {
+  background: #cf222e !important;
+  color: #ffffff !important;
+  border-color: #cf222e !important;
+}
+
+.mic-btn.recording::after {
   content: '';
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #fff;
-  animation: pulse-dot 1s infinite ease-in-out;
+  animation: baton-pulse 1s infinite ease-in-out;
 }
-@keyframes pulse-dot {
+
+@keyframes baton-pulse {
   0% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.3; transform: scale(0.6); }
   100% { opacity: 1; transform: scale(1); }
 }
+
 textarea {
-  box-sizing: border-box;
   width: 100%;
   resize: vertical;
-  padding: 8px;
+  padding: 8px 10px;
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, transparent);
+  border: 1px solid var(--vscode-input-border, rgba(127, 127, 127, 0.3));
+  border-radius: var(--baton-radius);
   font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  transition: border-color var(--baton-transition);
 }
+
+textarea:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  border-color: var(--vscode-focusBorder);
+}
+
+/* Primary & Secondary Buttons */
 button {
-  width: 100%;
-  margin-top: 12px;
-  padding: 8px 12px;
-  border: 0;
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
   font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: var(--baton-radius-sm);
+  cursor: pointer;
+  transition: background-color var(--baton-transition), opacity var(--baton-transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-primary, button[type="submit"] {
+  width: 100%;
+  margin-top: 10px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.btn-primary:hover, button[type="submit"]:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.btn-secondary {
+  background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.15));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-widget-border, transparent);
+}
+
+.btn-secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(127, 127, 127, 0.25));
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
+button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+/* Loading Spinners */
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: baton-spin 0.65s linear infinite;
+  vertical-align: -1px;
+  flex-shrink: 0;
+}
+
+@keyframes baton-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Status Messages */
+.status-msg {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+}
+
+/* Context Preview Accordion */
+.context-card {
+  margin-top: 12px;
+  padding: 8px 10px;
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.05));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
+  border-radius: var(--baton-radius);
+  font-size: 12px;
+}
+
+.context-card summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.context-intro {
+  margin: 6px 0 8px;
+  font-size: 11.5px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.context-sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.context-sources-list label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
 }
-button:hover { background: var(--vscode-button-hoverBackground); }
-button:disabled { opacity: 0.6; cursor: wait; }
-textarea:focus, button:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
-#result { white-space: pre-wrap; overflow-wrap: anywhere; }
-#route-card {
-  margin-top: 20px;
-  padding: 12px;
-  border: 1px solid var(--vscode-panel-border, var(--vscode-foreground));
-  border-radius: 6px;
-  white-space: normal;
+
+.context-sources-list input[type="checkbox"] {
+  margin: 0;
 }
-h2 { margin: 0 0 12px; font-size: 16px; }
-.risk { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; }
-.risk-low { background: #216e39; color: #fff; }
-.risk-moderate { background: #ffc44d; color: #201600; }
-.risk-high { background: #b42332; color: #fff; }
-dl { margin: 0; }
-dt { margin-top: 10px; font-weight: 600; }
-dd { margin: 4px 0 0; white-space: pre-wrap; }
-#action { font-weight: 700; }
-#policy-why { margin-bottom: 0; }
-#context-preview { margin-top: 16px; overflow-wrap: anywhere; }
-#context-preview summary { cursor: pointer; font-weight: 600; }
-#context-sources label { display: flex; align-items: baseline; gap: 6px; }
-#context-sources input { flex-shrink: 0; }
-#context-text { white-space: pre-wrap; max-height: 240px; overflow: auto; font-size: 12px; }
-.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-.tabs button { margin-top: 0; }
-.tabs [aria-selected="false"] { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
-.history-entry { margin-top: 12px; padding: 10px; border: 1px solid var(--vscode-panel-border); overflow-wrap: anywhere; }
-.history-entry summary { cursor: pointer; white-space: pre-wrap; }
-.history-entry p { white-space: pre-wrap; }
-.history-entry label { margin-top: 14px; }
-.history-entry textarea { margin-top: 6px; }
-#handoff-buttons { display: flex; gap: 8px; margin-top: 14px; }
-#handoff-buttons button { flex: 1; margin-top: 0; font-size: 13px; }
-#handoff-buttons button:disabled { opacity: 0.4; cursor: not-allowed; }
-#plan-section { margin-top: 16px; }
-#plan-section label { font-weight: 600; }
-#plan-section textarea { margin-top: 6px; }
-.plan-actions { display: flex; gap: 8px; }
-.plan-actions button { flex: 1; }
-#plan-status { margin-top: 8px; }
-.task-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-.task-controls button { margin-top: 0; }
-.task-controls button:disabled { cursor: not-allowed; }
+
+.context-size-text {
+  margin: 6px 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+.context-code {
+  margin: 8px 0;
+  padding: 8px;
+  max-height: 200px;
+  overflow: auto;
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  background: var(--vscode-textCodeBlock-background, rgba(0, 0, 0, 0.2));
+  border-radius: var(--baton-radius-sm);
+  white-space: pre-wrap;
+}
+
+/* ==========================================================================
+   Route Result Card (Clean Stage Demo Card)
+   ========================================================================== */
+.route-card {
+  margin-top: 16px;
+  padding: 14px;
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, rgba(127, 127, 127, 0.25)));
+  border-radius: var(--baton-radius-lg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--vscode-foreground);
+  line-height: 1.2;
+}
+
+/* Router Chip: "Router: Gemma | Ollama | Rules" */
+.router-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  background: var(--vscode-badge-background, rgba(127, 127, 127, 0.15));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
+  border-radius: var(--baton-radius-full);
+  font-size: 10.5px;
+  width: fit-content;
+}
+
+.router-chip-label {
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.chip-sep {
+  opacity: 0.3;
+  font-size: 9px;
+}
+
+.chip-tier {
+  padding: 1px 4px;
+  border-radius: 3px;
+  opacity: 0.5;
+  transition: all var(--baton-transition);
+  font-weight: 500;
+}
+
+.chip-tier.active {
+  opacity: 1;
+  font-weight: 700;
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #ffffff);
+}
+
+/* Risk Badges (Stage Demo High Contrast) */
+.risk {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: var(--baton-radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.risk-low {
+  background: rgba(46, 160, 67, 0.18);
+  color: #3fb950;
+  border: 1px solid rgba(46, 160, 67, 0.45);
+}
+
+.risk-moderate {
+  background: rgba(210, 153, 34, 0.18);
+  color: #e3b341;
+  border: 1px solid rgba(210, 153, 34, 0.45);
+}
+
+.risk-high {
+  background: rgba(248, 81, 73, 0.22);
+  color: #ff7b72;
+  border: 1px solid rgba(248, 81, 73, 0.55);
+}
+
+/* Light Theme Badge Adaptations */
+body.vscode-light .risk-low,
+.vscode-light .risk-low {
+  background: #dafbe1;
+  color: #1a7f37;
+  border-color: rgba(45, 164, 78, 0.45);
+}
+
+body.vscode-light .risk-moderate,
+.vscode-light .risk-moderate {
+  background: #fff8c5;
+  color: #9a6700;
+  border-color: rgba(191, 135, 0, 0.45);
+}
+
+body.vscode-light .risk-high,
+.vscode-light .risk-high {
+  background: #ffebe9;
+  color: #cf222e;
+  border-color: rgba(207, 34, 46, 0.45);
+}
+
+/* ==========================================================================
+   Status Stepper: Routed > Planned > Running > Done
+   ========================================================================== */
+.stepper-wrap {
+  margin: 10px 0 12px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--vscode-editor-inactiveSelectionBackground, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.15));
+  border-radius: var(--baton-radius);
+  font-size: 11px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--vscode-descriptionForeground);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color var(--baton-transition);
+}
+
+.step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--vscode-badge-background, rgba(127, 127, 127, 0.25));
+  color: var(--vscode-badge-foreground, var(--vscode-foreground));
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  transition: all var(--baton-transition);
+}
+
+.step-name {
+  font-size: 11px;
+}
+
+.step-arrow {
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
+  opacity: 0.4;
+  user-select: none;
+}
+
+/* Active Step */
+.step.active {
+  color: var(--vscode-foreground);
+  font-weight: 700;
+}
+
+.step.active .step-num {
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #ffffff);
+  box-shadow: 0 0 6px var(--vscode-button-background, rgba(14, 99, 156, 0.6));
+}
+
+/* Completed Step */
+.step.completed {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.step.completed .step-num {
+  background: #2da44e;
+  color: #ffffff;
+}
+
+/* Blocked Step */
+.step.blocked {
+  color: var(--vscode-errorForeground, #cf222e);
+  font-weight: 700;
+}
+
+.step.blocked .step-num {
+  background: #cf222e;
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   Visible Policy Override Alert Note
+   ========================================================================== */
+.policy-override-card {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--baton-radius);
+  background: var(--vscode-inputValidation-warningBackground, rgba(210, 153, 34, 0.15));
+  border: 1px solid var(--vscode-inputValidation-warningBorder, #d29922);
+  border-left: 4px solid var(--vscode-editorWarning-foreground, #e3b341);
+}
+
+.override-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.override-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.override-title {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--vscode-editorWarning-foreground, #e3b341);
+  letter-spacing: 0.3px;
+}
+
+.override-body {
+  margin: 4px 0 0 21px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--vscode-foreground);
+  opacity: 0.95;
+}
+
+/* Light Mode Policy Override */
+body.vscode-light .policy-override-card,
+.vscode-light .policy-override-card {
+  background: #fff8c5;
+  border-color: #d29922;
+  border-left-color: #9a6700;
+}
+
+body.vscode-light .override-title,
+.vscode-light .override-title {
+  color: #9a6700;
+}
+
+/* Route Details Grid */
+.route-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+  padding: 0;
+}
+
+.grid-item {
+  background: var(--vscode-editor-inactiveSelectionBackground, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.15));
+  border-radius: var(--baton-radius-sm);
+  padding: 6px 8px;
+}
+
+.grid-item dt {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.grid-item dd {
+  margin: 3px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.dest-badge {
+  color: var(--vscode-textLink-foreground, #3794ff) !important;
+}
+
+.action-badge {
+  font-weight: 700 !important;
+}
+
+/* Info & Callout Cards */
+.info-card {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: var(--baton-radius-sm);
+  background: var(--vscode-editor-inactiveSelectionBackground, rgba(127, 127, 127, 0.06));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.15));
+}
+
+.info-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 3px;
+}
+
+.info-content {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--vscode-foreground);
+  white-space: pre-wrap;
+}
+
+.policy-card {
+  border-left: 3px solid var(--vscode-badge-background, rgba(127, 127, 127, 0.5));
+}
+
+/* Card Sections & Headings */
+.card-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--vscode-panel-border, rgba(127, 127, 127, 0.2));
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 8px;
+}
+
+/* Handoff Buttons */
+#handoff-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.btn-handoff {
+  margin-top: 0;
+  padding: 7px 8px;
+  font-size: 11.5px;
+  background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.15));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
+  border-radius: var(--baton-radius-sm);
+}
+
+.btn-handoff:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(127, 127, 127, 0.25));
+}
+
+/* Plan Section */
+#plan-section textarea {
+  margin-top: 4px;
+}
+
+.plan-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.plan-actions button {
+  margin: 0;
+}
+
+/* Task Execution Controls */
+.task-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.task-controls button {
+  margin: 0;
+  font-size: 11.5px;
+  padding: 6px 8px;
+}
+
+.outcome-msg {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+/* ==========================================================================
+   History Pane Styles
+   ========================================================================== */
+.history-actions {
+  margin-bottom: 12px;
+}
+
+.history-actions button {
+  width: 100%;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-entry {
+  padding: 10px 12px;
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.06));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
+  border-radius: var(--baton-radius);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.history-entry summary {
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.history-entry p {
+  margin: 6px 0;
+  white-space: pre-wrap;
+  font-size: 11.5px;
+}
+
+.history-entry label {
+  display: block;
+  margin-top: 10px;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.history-entry textarea {
+  margin-top: 4px;
+}
+
+.history-entry button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.history-entry .task-controls {
+  margin-top: 10px;
+}
+
+/* ==========================================================================
+   Friendly Error & Status Toasts
+   ========================================================================== */
+.toast-container {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--baton-radius);
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+  animation: baton-toast-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  word-break: break-word;
+}
+
+.toast.toast-out {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+@keyframes baton-toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-error {
+  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  color: var(--vscode-foreground, #ffffff);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+}
+
+.toast-warning {
+  background: var(--vscode-inputValidation-warningBackground, #4d3800);
+  color: var(--vscode-foreground, #ffffff);
+  border: 1px solid var(--vscode-inputValidation-warningBorder, #b89500);
+}
+
+.toast-info {
+  background: var(--vscode-inputValidation-infoBackground, #063b5e);
+  color: var(--vscode-foreground, #ffffff);
+  border: 1px solid var(--vscode-inputValidation-infoBorder, #007acc);
+}
+
+.toast-success {
+  background: var(--vscode-editorWidget-background, #1b3d22);
+  color: var(--vscode-foreground, #ffffff);
+  border: 1px solid #2da44e;
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 11.5px;
+}
+
+.toast-close {
+  background: transparent !important;
+  border: none !important;
+  color: inherit !important;
+  opacity: 0.65;
+  cursor: pointer;
+  padding: 0 4px;
+  margin: -2px -4px -2px 0;
+  width: auto !important;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+/* Accessibility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

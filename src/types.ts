@@ -67,13 +67,15 @@ export type PolicyDecision = {
   route: Route;
   action: 'RUN' | 'CONFIRM' | 'MANUAL_ONLY' | 'BLOCK';
   why: string;
+  overrode?: boolean;
 };
 export type RouterTier = 'gemma' | 'ollama' | 'rules';
 export type RouterResult = { route: Route; tier: RouterTier };
 export type ExtensionMessage =
   | { type: 'contextPreview'; requestId: number; parts: ContextPart[]; limit: number }
   | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean }
-  | { type: 'routeError'; requestId: number };
+  | { type: 'routeError'; requestId: number }
+  | { type: 'prefillDemo'; text: string };
 
 export function isPanelMessage(message: unknown): message is PanelMessage {
   if (typeof message !== 'object' || message === null

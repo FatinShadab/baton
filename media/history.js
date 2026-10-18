@@ -7,15 +7,24 @@ function initializeHistory(vscode, taskActions) {
   const expanded = new Set();
   const drafts = new Map();
   let busy = false;
-  const tiers = { gemma: 'Gemma (AI Studio)', ollama: 'Ollama', rules: 'rules' };
+  const tiers = { gemma: 'Gemma', ollama: 'Ollama', rules: 'Rules' };
+
+  function notify(msg, type = 'info') {
+    if (typeof window.showBatonToast === 'function') {
+      window.showBatonToast(msg, type);
+    }
+  }
 
   function send(message) {
     if (busy) return;
     busy = true;
     pane.querySelectorAll('button, textarea').forEach((input) => { input.disabled = true; });
-    status.textContent = message.type === 'loadHistory' ? 'Loading history…' : 'Saving…';
+    status.innerHTML = message.type === 'loadHistory'
+      ? '<span class="spinner"></span> Loading history…'
+      : '<span class="spinner"></span> Saving…';
     vscode.postMessage(message);
   }
+
   function show(index) {
     tabs.forEach((tab, i) => {
       tab.setAttribute('aria-selected', String(i === index));
@@ -24,6 +33,7 @@ function initializeHistory(vscode, taskActions) {
     });
     if (index === 1) send({ type: 'loadHistory' });
   }
+
   tabs.forEach((tab, index) => {
     tab.addEventListener('click', () => show(index));
     tab.addEventListener('keydown', (event) => {
@@ -34,11 +44,15 @@ function initializeHistory(vscode, taskActions) {
       tabs[next].focus();
     });
   });
+
   refresh.addEventListener('click', () => send({ type: 'loadHistory' }));
 
   function render(tasks) {
     list.replaceChildren();
-    if (!tasks.length) list.textContent = 'No tasks yet. Route a task to start your history.';
+    if (!tasks.length) {
+      list.textContent = 'No tasks recorded yet. Route a coding task to begin.';
+      return;
+    }
     for (const task of tasks) {
       const details = document.createElement('details');
       details.className = 'history-entry';
@@ -47,13 +61,20 @@ function initializeHistory(vscode, taskActions) {
         if (details.open) expanded.add(task.id);
         else expanded.delete(task.id);
       });
+
       const summary = document.createElement('summary');
-      summary.textContent = `${new Date(task.createdAt).toLocaleString()} · ${task.text}\n` +
-        `${task.route.risk_tier} risk · ${tiers[task.routerTier] ?? task.routerTier} · ${task.status}`;
+      const timeStr = new Date(task.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      summary.innerHTML = `<span class="risk risk-${task.route.risk_tier}">${task.route.risk_tier}</span> ` +
+        `<strong>${task.text}</strong>\n` +
+        `<span class="context-intro">${timeStr} · Router: ${tiers[task.routerTier] ?? task.routerTier} · Status: ${task.status}</span>`;
+
       const info = document.createElement('p');
       info.textContent = `${task.route.task_type} → ${task.route.recommended_destination}\n` +
-        `Research needed: ${task.route.research_needed ? 'Yes' : 'No'}\n${task.route.reason}\nDecision: ${task.decision}`;
+        `Research needed: ${task.route.research_needed ? 'Yes' : 'No'}\n` +
+        `Reason: ${task.route.reason}\n` +
+        `Decision: ${task.decision}`;
       details.append(summary, info);
+
       if (task.changedFiles || task.status === 'done') {
         const files = document.createElement('p');
         files.textContent = `Changed files:\n${task.changedFiles?.join('\n') || (task.changedFiles ? '(none)' : '(unavailable)')}`;
@@ -69,8 +90,10 @@ function initializeHistory(vscode, taskActions) {
         approval.textContent = `Approved: ${task.approvals.map((entry) => new Date(entry.approvedAt).toLocaleString()).join(', ')}`;
         details.append(approval);
       }
+
       if (drafts.get(task.id)?.plan === task.plan) drafts.delete(task.id);
       const draft = drafts.get(task.id) ?? { plan: task.plan ?? '' };
+
       function field(name, caption) {
         const label = document.createElement('label');
         label.textContent = caption;
@@ -82,18 +105,27 @@ function initializeHistory(vscode, taskActions) {
         details.append(label);
         return input;
       }
+
       const plan = field('plan', 'Plan');
       const importButton = document.createElement('button');
       importButton.type = 'button';
-      importButton.textContent = 'Import plan';
+      importButton.className = 'btn-secondary';
+      importButton.textContent = '📥 Import plan to memory';
       importButton.addEventListener('click', () => {
-        if (!plan.value.trim()) { status.textContent = 'Paste a plan first.'; return; }
+        if (!plan.value.trim()) {
+          notify('Paste a plan first.', 'warning');
+          status.textContent = 'Paste a plan first.';
+          return;
+        }
         if (new TextEncoder().encode(plan.value).length > 100 * 1024) {
-          status.textContent = 'Keep the plan under 100 KB.'; return;
+          notify('Keep the plan under 100 KB.', 'warning');
+          status.textContent = 'Keep the plan under 100 KB.';
+          return;
         }
         send({ type: 'importPlan', taskId: task.id, plan: plan.value });
       });
       details.append(importButton);
+
       const controls = document.createElement('div');
       controls.className = 'task-controls';
       details.append(controls);
@@ -103,13 +135,26 @@ function initializeHistory(vscode, taskActions) {
   }
 
   window.addEventListener('message', ({ data }) => {
-    if (data?.type === 'taskActionResult') { status.textContent = data.notice; return; }
+    if (data?.type === 'taskActionResult') {
+      status.textContent = data.notice;
+      notify(data.notice, 'info');
+      return;
+    }
     if (data?.type !== 'history' && data?.type !== 'historyError') return;
     busy = false;
     pane.querySelectorAll('button, textarea').forEach((input) => { input.disabled = false; });
-    if (data.type === 'historyError') { status.textContent = data.message; taskActions.update(); return; }
+    if (data.type === 'historyError') {
+      status.textContent = data.message;
+      notify(data.message, 'error');
+      taskActions.update();
+      return;
+    }
     render(data.tasks);
-    if (data.notice) status.textContent = data.notice;
-    else if (status.textContent === 'Loading history…') status.textContent = '';
+    if (data.notice) {
+      status.textContent = data.notice;
+      notify(data.notice, 'success');
+    } else if (status.textContent.includes('Loading history')) {
+      status.textContent = '';
+    }
   });
 }
