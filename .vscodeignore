@@ -1,0 +1,10 @@
+.vscode/**
+src/**
+node_modules/**
+prompts/**
+AGENTS.md
+tsconfig.json
+esbuild.mjs
+package-lock.json
+.gitignore
+dist/**/*.map

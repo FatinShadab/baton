@@ -1,0 +1,39 @@
+{
+  "name": "baton",
+  "displayName": "Baton",
+  "description": "Route coding tasks from your VS Code sidebar.",
+  "version": "0.0.1",
+  "publisher": "baton-dev",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onView:baton.panel"],
+  "contributes": {
+    "commands": [
+      { "command": "baton.setKeys", "title": "Baton: Set API Keys" },
+      { "command": "baton.focus", "title": "Baton: Focus" }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "baton", "title": "Baton", "icon": "media/baton.svg" }
+      ]
+    },
+    "views": {
+      "baton": [
+        { "type": "webview", "id": "baton.panel", "name": "Baton" }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run check && npm run build",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "~1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}
