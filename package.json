@@ -4,23 +4,43 @@
   "description": "Route coding tasks from your VS Code sidebar.",
   "version": "0.0.1",
   "publisher": "baton-dev",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Other"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
   "main": "./dist/extension.js",
-  "activationEvents": ["onView:baton.panel"],
+  "activationEvents": [
+    "onView:baton.panel"
+  ],
   "contributes": {
     "commands": [
-      { "command": "baton.setKeys", "title": "Baton: Set API Keys" },
-      { "command": "baton.focus", "title": "Baton: Focus" }
+      {
+        "command": "baton.setKeys",
+        "title": "Baton: Set API Keys"
+      },
+      {
+        "command": "baton.focus",
+        "title": "Baton: Focus"
+      }
     ],
     "viewsContainers": {
       "activitybar": [
-        { "id": "baton", "title": "Baton", "icon": "media/baton.svg" }
+        {
+          "id": "baton",
+          "title": "Baton",
+          "icon": "media/baton.svg"
+        }
       ]
     },
     "views": {
       "baton": [
-        { "type": "webview", "id": "baton.panel", "name": "Baton" }
+        {
+          "type": "webview",
+          "id": "baton.panel",
+          "name": "Baton"
+        }
       ]
     }
   },
@@ -35,5 +55,8 @@
     "@types/vscode": "~1.85.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
   }
 }

@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
 import { setKeys } from './secrets';
+import { JsonStore } from './store';
 import { ExtensionMessage, isPanelMessage } from './types';
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): { store: JsonStore } {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
+  const store = new JsonStore(context.globalStorageUri);
+  void store.loadTasks();
 
   context.subscriptions.push(
     vscode.commands.registerCommand('baton.setKeys', () => setKeys(context.secrets)),
@@ -46,4 +49,5 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     }),
   );
+  return { store };
 }
