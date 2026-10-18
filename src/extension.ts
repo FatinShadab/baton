@@ -4,10 +4,11 @@ import { setKeys } from './secrets';
 import { JsonStore } from './store';
 import { initializeRouter, routeTask } from './router';
 import { decide } from './policy';
-import { ExtensionMessage, isHistoryMessage, isPanelMessage } from './types';
+import { ExtensionMessage, isHandoffMessage, isHistoryMessage, isPanelMessage } from './types';
 import { buildContext, BuiltContext, MAX_CONTEXT_CHARS, selectContext } from './context';
 import { initializeMemory, MemoryStore } from './memory';
 import { TaskHistory } from './history';
+import { planExternal, readClipboard } from './handoff';
 
 export function activate(context: vscode.ExtensionContext): { store: JsonStore; memory: MemoryStore } {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
@@ -30,11 +31,36 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
         view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
         let preview: { requestId: number; text: string; context: BuiltContext } | undefined;
         let latestPreview = 0;
+        let lastRouted: { taskId: string; text: string; snippet: string } | undefined;
         const listener = view.webview.onDidReceiveMessage(async (message: unknown) => {
           if (isHistoryMessage(message)) {
             try {
               await view.webview.postMessage(await history.handle(message));
             } catch { /* A closed sidebar can no longer receive messages. */ }
+            return;
+          }
+          if (isHandoffMessage(message)) {
+            try {
+              if (message.type === 'readClipboard') {
+                const text = await readClipboard();
+                await view.webview.postMessage({ type: 'clipboardContent', text });
+              } else if (message.type === 'planExternal') {
+                let text = lastRouted?.taskId === message.taskId ? lastRouted.text : '';
+                const snippet = lastRouted?.taskId === message.taskId ? lastRouted.snippet : '';
+                if (!text) {
+                  const tasks = await store.loadTasks();
+                  text = tasks?.find((t) => t.id === message.taskId)?.text ?? '';
+                }
+                await planExternal(message.target, text, snippet);
+              } else if (message.type === 'savePlan') {
+                const notice = await history.save(message.taskId, { plan: message.plan });
+                await view.webview.postMessage({ type: 'planSaved', taskId: message.taskId, notice });
+              }
+            } catch {
+              try {
+                await view.webview.postMessage({ type: 'planSaveError', message: 'Handoff action failed. Please try again.' });
+              } catch { /* closed */ }
+            }
             return;
           }
           if (!isPanelMessage(message)) return;
@@ -56,8 +82,9 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
             const snippet = selectContext(preview.context, message.sources);
             const { route, tier } = await routeTask(message.text, snippet);
             const decision = decide(route, message.text);
+            const taskId = randomUUID();
             const saved = await store.appendTask({
-              id: randomUUID(),
+              id: taskId,
               createdAt: new Date().toISOString(),
               text: message.text,
               route: decision.route,
@@ -65,7 +92,8 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
               decision: decision.action,
               status: decision.action === 'BLOCK' ? 'blocked' : 'routed',
             });
-            reply = { type: 'routed', requestId: message.requestId, text: message.text, decision, tier, saved };
+            lastRouted = { taskId, text: message.text, snippet };
+            reply = { type: 'routed', requestId: message.requestId, taskId, text: message.text, decision, tier, saved };
           } catch {
             reply = { type: 'routeError', requestId: message.requestId };
           }

@@ -9,10 +9,18 @@
   const preview = document.getElementById('context-preview');
   const sourceList = document.getElementById('context-sources');
   const refresh = document.getElementById('refresh-context');
+  const planChatgpt = document.getElementById('plan-chatgpt');
+  const planGemini = document.getElementById('plan-gemini');
+  const planSection = document.getElementById('plan-section');
+  const planText = document.getElementById('plan-text');
+  const savePlanBtn = document.getElementById('save-plan');
+  const useClipboardBtn = document.getElementById('use-clipboard');
+  const planStatus = document.getElementById('plan-status');
   let requestId = 0;
   let ready = false;
   let parts = [];
   let limit = 6000;
+  let currentTaskId = '';
   const selected = new Set();
   const tiers = { gemma: 'via Gemma (AI Studio)', ollama: 'via Ollama', rules: 'via rules' };
   task.value = vscode.getState()?.task ?? '';
@@ -27,6 +35,10 @@
     refresh.disabled = false;
     submit.textContent = 'Prepare context';
     status.textContent = '';
+    currentTaskId = '';
+    planSection.hidden = true;
+    planText.value = '';
+    planStatus.textContent = '';
   });
 
   function updatePreview() {
@@ -66,6 +78,25 @@
     if (data?.type === 'history' && data.changed) {
       // A newly imported plan must be included in a fresh context snapshot.
       task.dispatchEvent(new Event('input'));
+      return;
+    }
+    if (data?.type === 'clipboardContent') {
+      if (typeof data.text === 'string' && data.text) {
+        planText.value = data.text;
+        planStatus.textContent = 'Clipboard content pasted.';
+      } else {
+        planStatus.textContent = 'Clipboard was empty.';
+      }
+      return;
+    }
+    if (data?.type === 'planSaved') {
+      savePlanBtn.disabled = false;
+      planStatus.textContent = data.notice ?? 'Plan saved to memory.';
+      return;
+    }
+    if (data?.type === 'planSaveError') {
+      savePlanBtn.disabled = false;
+      planStatus.textContent = data.message ?? 'Could not save plan.';
       return;
     }
     if (data?.requestId !== requestId) return;
@@ -108,6 +139,7 @@
       return;
     }
     if (data?.type !== 'routed' || !data.decision?.route) return;
+    currentTaskId = data.taskId || '';
     submit.disabled = false;
     status.textContent = data.saved ? 'Saved. Open History to import a plan or mark this task complete.'
       : 'Route ready, but local memory could not be saved.';
@@ -125,5 +157,41 @@
     document.getElementById('policy-why').textContent = why;
     document.getElementById('router-tier').textContent = tiers[data.tier] ?? '';
     card.hidden = false;
+    planSection.hidden = false;
+  });
+
+  planChatgpt.addEventListener('click', () => {
+    if (!currentTaskId) return;
+    planSection.hidden = false;
+    vscode.postMessage({ type: 'planExternal', target: 'chatgpt', taskId: currentTaskId });
+  });
+
+  planGemini.addEventListener('click', () => {
+    if (!currentTaskId) return;
+    planSection.hidden = false;
+    vscode.postMessage({ type: 'planExternal', target: 'gemini', taskId: currentTaskId });
+  });
+
+  useClipboardBtn.addEventListener('click', () => {
+    vscode.postMessage({ type: 'readClipboard' });
+  });
+
+  savePlanBtn.addEventListener('click', () => {
+    if (!currentTaskId) {
+      planStatus.textContent = 'Route a task first.';
+      return;
+    }
+    const plan = planText.value.trim();
+    if (!plan) {
+      planStatus.textContent = 'Paste a plan first.';
+      return;
+    }
+    if (new TextEncoder().encode(plan).length > 100 * 1024) {
+      planStatus.textContent = 'Keep the plan under 100 KB.';
+      return;
+    }
+    savePlanBtn.disabled = true;
+    planStatus.textContent = 'Saving plan…';
+    vscode.postMessage({ type: 'savePlan', taskId: currentTaskId, plan });
   });
 })();

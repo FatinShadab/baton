@@ -11,6 +11,28 @@ export type HistoryReply =
   | { type: 'history'; tasks: TaskRecord[]; notice?: string; changed: boolean }
   | { type: 'historyError'; message: string };
 
+export type HandoffMessage =
+  | { type: 'planExternal'; target: 'chatgpt' | 'gemini'; taskId: string }
+  | { type: 'savePlan'; taskId: string; plan: string }
+  | { type: 'readClipboard' };
+export type HandoffReply =
+  | { type: 'clipboardContent'; text: string }
+  | { type: 'planSaved'; taskId: string; notice: string }
+  | { type: 'planSaveError'; message: string };
+
+export function isHandoffMessage(message: unknown): message is HandoffMessage {
+  if (typeof message !== 'object' || message === null || !('type' in message)) return false;
+  if (message.type === 'readClipboard') return true;
+  if (message.type === 'planExternal' && 'target' in message && 'taskId' in message
+    && typeof message.taskId === 'string' && message.taskId.length > 0
+    && (message.target === 'chatgpt' || message.target === 'gemini')) return true;
+  if (message.type === 'savePlan' && 'taskId' in message && 'plan' in message
+    && typeof message.taskId === 'string' && message.taskId.length > 0
+    && typeof message.plan === 'string' && message.plan.trim().length > 0
+    && Buffer.byteLength(message.plan, 'utf8') <= 100 * 1024) return true;
+  return false;
+}
+
 export function isHistoryMessage(message: unknown): message is HistoryMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
   if (message.type === 'loadHistory') return true;
@@ -29,7 +51,7 @@ export type RouterTier = 'gemma' | 'ollama' | 'rules';
 export type RouterResult = { route: Route; tier: RouterTier };
 export type ExtensionMessage =
   | { type: 'contextPreview'; requestId: number; parts: ContextPart[]; limit: number }
-  | { type: 'routed'; requestId: number; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean }
+  | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean }
   | { type: 'routeError'; requestId: number };
 
 export function isPanelMessage(message: unknown): message is PanelMessage {

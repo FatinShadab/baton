@@ -60,3 +60,12 @@ dd { margin: 4px 0 0; white-space: pre-wrap; }
 .history-entry p { white-space: pre-wrap; }
 .history-entry label { margin-top: 14px; }
 .history-entry textarea { margin-top: 6px; }
+#handoff-buttons { display: flex; gap: 8px; margin-top: 14px; }
+#handoff-buttons button { flex: 1; margin-top: 0; font-size: 13px; }
+#handoff-buttons button:disabled { opacity: 0.4; cursor: not-allowed; }
+#plan-section { margin-top: 16px; }
+#plan-section label { font-weight: 600; }
+#plan-section textarea { margin-top: 6px; }
+.plan-actions { display: flex; gap: 8px; }
+.plan-actions button { flex: 1; }
+#plan-status { margin-top: 8px; }

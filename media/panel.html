@@ -29,7 +29,7 @@
   </form>
   <section id="result" role="status" aria-live="polite" aria-atomic="true">
     <p id="routing-status"></p>
-    <article id="route-card" hidden>
+  <article id="route-card" hidden>
       <h2>Route <span id="risk" class="risk"></span></h2>
       <p id="router-tier"></p>
       <dl>
@@ -40,6 +40,20 @@
         <dt>Policy action</dt><dd id="action"></dd>
       </dl>
       <p id="policy-why"></p>
+      <div id="handoff-buttons">
+        <button id="plan-chatgpt" type="button">Plan in ChatGPT</button>
+        <button id="plan-gemini" type="button">Plan in Gemini</button>
+        <button id="run-codex" type="button" disabled title="Coming soon">Run in Codex</button>
+      </div>
+      <div id="plan-section" hidden>
+        <label for="plan-text">Paste the plan here</label>
+        <textarea id="plan-text" rows="8" placeholder="Paste the implementation plan you received…"></textarea>
+        <div class="plan-actions">
+          <button id="use-clipboard" type="button">Use clipboard</button>
+          <button id="save-plan" type="button">Save plan</button>
+        </div>
+        <p id="plan-status" role="status" aria-live="polite"></p>
+      </div>
     </article>
   </section>
   </section>
