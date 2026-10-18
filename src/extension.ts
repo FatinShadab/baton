@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { setKeys } from './secrets';
+import { importDevelopmentKeys, setKeys } from './secrets';
 import { JsonStore } from './store';
 import { initializeRouter, routeTask } from './router';
 import { decide } from './policy';
@@ -8,17 +8,21 @@ import { ExtensionMessage, isHandoffMessage, isHistoryMessage, isPanelMessage, i
 import { buildContext, BuiltContext, MAX_CONTEXT_CHARS, selectContext } from './context';
 import { initializeMemory, MemoryStore } from './memory';
 import { TaskHistory } from './history';
-import { planExternal, readClipboard } from './handoff';
+import { handoffAvailability, planExternal, readClipboard } from './handoff';
 import { FallbackServerSession, initVoice, startVoiceFallbackServer, transcribe } from './voice';
 import { CodexRunner } from './codex';
-import { copyMcpConfig, registerMcpProvider } from './mcp/config';
+import { copyMcpConfig, registerMcpProvider, serverOptions } from './mcp/config';
+import { McpSession } from './mcp/session';
+import { ensureMcpAgentInstructions } from './mcp/agents';
 
-export function activate(context: vscode.ExtensionContext): { store: JsonStore; memory: MemoryStore } {
+export async function activate(context: vscode.ExtensionContext): Promise<{ store: JsonStore; memory: MemoryStore }> {
+  await importDevelopmentKeys(context);
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
   const store = new JsonStore(context.globalStorageUri);
   const memory = initializeMemory(store);
   const history = new TaskHistory(store, memory);
-  const codex = new CodexRunner(store, history);
+  const codex = new CodexRunner(store, history, context.extensionUri, context.extensionMode);
+  const mcp = new McpSession(context);
 
   initVoice(context.secrets);
   registerMcpProvider(context);
@@ -38,6 +42,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
 
   context.subscriptions.push(
     codex,
+    mcp,
     initializeRouter(context.secrets),
     vscode.commands.registerCommand('baton.setKeys', () => setKeys(context.secrets)),
     vscode.commands.registerCommand('baton.copyMcpConfig', () => copyMcpConfig(context)),
@@ -71,7 +76,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
           }, 250);
         }
         view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
-        let preview: { requestId: number; text: string; context: BuiltContext } | undefined;
+        let preview: { requestId: number; text: string; demo: boolean; context: BuiltContext } | undefined;
         let latestPreview = 0;
         let lastRouted: { taskId: string; text: string; snippet: string } | undefined;
         let fallbackSession: FallbackServerSession | undefined;
@@ -87,6 +92,22 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
         };
 
         const listener = view.webview.onDidReceiveMessage(async (message: unknown) => {
+          if (typeof message === 'object' && message !== null && 'type' in message
+            && (message.type === 'mcpToggle' || message.type === 'mcpStatusRequest' || message.type === 'mcpCopyConfig')) {
+            if (message.type === 'mcpCopyConfig') {
+              await copyMcpConfig(context);
+              return;
+            }
+            let notice = message.type === 'mcpToggle' ? (mcp.running ? await mcp.stop() : await mcp.start()) : undefined;
+            if (message.type === 'mcpToggle' && mcp.running) {
+              const instructions = await ensureMcpAgentInstructions();
+              if (instructions === 'created') notice += ' Added AGENTS.md to the project root.';
+              if (instructions === 'failed') notice += ' Could not add AGENTS.md to the project root.';
+            }
+            const options = mcp.running ? serverOptions(context) : undefined;
+            try { await view.webview.postMessage({ type: 'mcpStatus', running: mcp.running, command: options?.command, endpoint: options?.args[0], notice }); } catch { /* closed */ }
+            return;
+          }
           if (isTaskActionMessage(message)) {
             const reply = await codex.handle(message);
             try {
@@ -106,6 +127,8 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
               if (message.type === 'readClipboard') {
                 const text = await readClipboard();
                 await view.webview.postMessage({ type: 'clipboardContent', text });
+              } else if (message.type === 'handoffAvailabilityRequest') {
+                await view.webview.postMessage({ type: 'handoffAvailability', installed: handoffAvailability() });
               } else if (message.type === 'planExternal') {
                 let text = lastRouted?.taskId === message.taskId ? lastRouted.text : '';
                 const snippet = lastRouted?.taskId === message.taskId ? lastRouted.snippet : '';
@@ -113,7 +136,8 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
                   const tasks = await store.loadTasks();
                   text = tasks?.find((t) => t.id === message.taskId)?.text ?? '';
                 }
-                await planExternal(message.target, text, snippet);
+                const notice = await planExternal(message.target, text, snippet);
+                await view.webview.postMessage({ type: 'handoffResult', notice });
               } else if (message.type === 'savePlan') {
                 const notice = await history.save(message.taskId, { plan: message.plan });
                 await view.webview.postMessage({ type: 'planSaved', taskId: message.taskId, notice });
@@ -163,19 +187,20 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
             if (message.type === 'previewContext') {
               const generation = ++latestPreview;
               preview = undefined;
-              const collected = await buildContext(message.text);
+              const collected = await buildContext(message.text, message.demo, context.extensionUri);
               if (generation !== latestPreview) return;
-              preview = { requestId: message.requestId, text: message.text, context: collected };
+              preview = { requestId: message.requestId, text: message.text, demo: message.demo, context: collected };
               await view.webview.postMessage({ type: 'contextPreview', requestId: message.requestId,
                 parts: collected.parts, limit: MAX_CONTEXT_CHARS } satisfies ExtensionMessage);
               return;
             }
-            if (!preview || preview.requestId !== message.requestId || preview.text !== message.text) {
+            if (!preview || preview.requestId !== message.requestId || preview.text !== message.text
+              || preview.demo !== message.demo) {
               throw new Error('Prepare a context preview before routing.');
             }
             const snippet = selectContext(preview.context, message.sources);
             const workspaceUri = preview.context.workspaceUri;
-            const { route, tier } = await routeTask(message.text, snippet);
+            const { route, tier, notice } = await routeTask(message.text, snippet, workspaceUri);
             const decision = decide(route, message.text);
             const taskId = randomUUID();
             const saved = await store.appendTask({
@@ -190,7 +215,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
               status: decision.action === 'BLOCK' ? 'blocked' : 'routed',
             });
             lastRouted = { taskId, text: message.text, snippet };
-            reply = { type: 'routed', requestId: message.requestId, taskId, text: message.text, decision, tier, saved };
+            reply = { type: 'routed', requestId: message.requestId, taskId, text: message.text, decision, tier, saved, notice };
           } catch {
             reply = { type: 'routeError', requestId: message.requestId };
           }
@@ -200,11 +225,18 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
             // A closed sidebar can no longer receive messages.
           }
         });
+        const extensionListener = vscode.extensions.onDidChange(() => {
+          try {
+            void view.webview.postMessage({ type: 'handoffAvailability', installed: handoffAvailability() })
+              .then(undefined, () => { /* closed */ });
+          } catch { /* closed */ }
+        });
         view.onDidDispose(() => {
           if (activeWebviewView === view) {
             activeWebviewView = undefined;
           }
           listener.dispose();
+          extensionListener.dispose();
           if (fallbackSession) {
             fallbackSession.close();
             fallbackSession = undefined;

@@ -56,14 +56,25 @@ export function selectContext(context: BuiltContext, sources: string[]): string 
     .map((part) => part.text).join('\n\n').slice(0, MAX_CONTEXT_CHARS);
 }
 
+function withoutDemoSections(content: string): string {
+  let skip = false;
+  return content.split(/\r?\n/).filter((line) => {
+    if (/^##\s+/.test(line)) skip = /\b(demo|example)\b/i.test(line);
+    return !skip;
+  }).join('\n');
+}
+
 /** Collect locally; parts preserve source boundaries for the sharing preview. */
-export async function buildContext(task: string): Promise<BuiltContext> {
+export async function buildContext(task: string, demo = false, extensionUri?: vscode.Uri): Promise<BuiltContext> {
   const parts: ContextPart[] = [];
   const add = (source: string, content: string) => {
     if (content) parts.push({ source, text: `--- ${source} ---\n${content}` });
   };
   const editor = vscode.window.activeTextEditor;
-  const folder = (editor && vscode.workspace.getWorkspaceFolder(editor.document.uri))
+  const demoFolder = demo && extensionUri ? {
+    uri: vscode.Uri.joinPath(extensionUri, 'demo-repo'), name: 'demo-repo', index: 0,
+  } : undefined;
+  const folder = demoFolder ?? (editor && vscode.workspace.getWorkspaceFolder(editor.document.uri))
     ?? vscode.workspace.workspaceFolders?.[0];
   try {
     if (folder?.uri.scheme === 'file') {
@@ -72,14 +83,21 @@ export async function buildContext(task: string): Promise<BuiltContext> {
       if (readme) {
         try {
           const content = await readFile(readme, { encoding: 'utf8', signal: AbortSignal.timeout(3000) });
-          if (Buffer.byteLength(content, 'utf8') <= MAX_FILE_BYTES) add(`${folder.name}/README.md`, content.slice(0, 3000));
+          if (Buffer.byteLength(content, 'utf8') <= MAX_FILE_BYTES) {
+            add(`${folder.name}/README.md`, (demo ? content : withoutDemoSections(content)).slice(0, 3000));
+          }
         } catch { /* Missing or unreadable README is optional. */ }
       }
       const [status, diff] = await Promise.all([gitSummary(root, 'status'), gitSummary(root, 'diff')]);
       add(`${folder.name}: git status --short`, status);
       add(`${folder.name}: git diff --stat`, diff);
       if (editor?.document.uri.scheme === 'file') {
-        const file = await safeFile(editor.document.uri.fsPath, root);
+        const demoRoot = extensionUri && vscode.Uri.joinPath(extensionUri, 'demo-repo').fsPath;
+        const relativeToDemo = demoRoot && path.relative(demoRoot, editor.document.uri.fsPath);
+        const isDemoEditor = relativeToDemo !== undefined &&
+          (relativeToDemo === '' || (relativeToDemo !== '..'
+            && !relativeToDemo.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeToDemo)));
+        const file = !demo && isDemoEditor ? undefined : await safeFile(editor.document.uri.fsPath, root);
         if (file) {
           const document = editor.document;
           // Also check unsaved editor content before selecting a snippet.
@@ -87,7 +105,9 @@ export async function buildContext(task: string): Promise<BuiltContext> {
             const range = editor.selection.isEmpty
               ? new vscode.Range(0, 0, Math.min(149, document.lineCount - 1), Number.MAX_SAFE_INTEGER)
               : editor.selection;
-            add(`${file} (${editor.selection.isEmpty ? 'first 150 lines' : 'selection'})`, document.getText(range));
+            const excerpt = document.getText(range);
+            add(`${file} (${editor.selection.isEmpty ? 'first 150 lines' : 'selection'})`,
+              !demo && path.basename(file).toLowerCase() === 'readme.md' ? withoutDemoSections(excerpt) : excerpt);
           }
         }
       }
@@ -97,7 +117,8 @@ export async function buildContext(task: string): Promise<BuiltContext> {
     const hits = await search(task, 5);
     const workspaceParts = parts.splice(0);
     for (const hit of hits) {
-      if (allowed(hit.source) && Buffer.byteLength(hit.text, 'utf8') <= MAX_FILE_BYTES) add(hit.source, hit.text);
+      if (hit.meta?.workspaceUri === folder?.uri.toString()
+        && allowed(hit.source) && Buffer.byteLength(hit.text, 'utf8') <= MAX_FILE_BYTES) add(hit.source, hit.text);
     }
     // Put relevant memories first so the final character cap keeps prior plans.
     parts.push(...workspaceParts);

@@ -1,8 +1,8 @@
 import type { ContextPart } from './context';
 
 export type PanelMessage =
-  | { type: 'previewContext'; text: string; requestId: number }
-  | { type: 'routeTask'; text: string; requestId: number; sources: string[] };
+  | { type: 'previewContext'; text: string; requestId: number; demo: boolean }
+  | { type: 'routeTask'; text: string; requestId: number; sources: string[]; demo: boolean };
 export type HistoryMessage =
   | { type: 'loadHistory' }
   | { type: 'importPlan'; taskId: string; plan: string };
@@ -21,7 +21,8 @@ export type HistoryReply =
   | { type: 'historyError'; message: string };
 
 export type HandoffMessage =
-  | { type: 'planExternal'; target: 'chatgpt' | 'gemini'; taskId: string }
+  | { type: 'planExternal'; target: 'chatgpt' | 'gemini' | 'claude' | 'antigravity'; taskId: string }
+  | { type: 'handoffAvailabilityRequest' }
   | { type: 'savePlan'; taskId: string; plan: string }
   | { type: 'readClipboard' };
 export type HandoffReply =
@@ -45,10 +46,12 @@ export function isVoiceMessage(message: unknown): message is VoiceMessage {
 
 export function isHandoffMessage(message: unknown): message is HandoffMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
+  if (message.type === 'handoffAvailabilityRequest') return true;
   if (message.type === 'readClipboard') return true;
   if (message.type === 'planExternal' && 'target' in message && 'taskId' in message
     && typeof message.taskId === 'string' && message.taskId.length > 0
-    && (message.target === 'chatgpt' || message.target === 'gemini')) return true;
+    && (message.target === 'chatgpt' || message.target === 'gemini'
+      || message.target === 'claude' || message.target === 'antigravity')) return true;
   if (message.type === 'savePlan' && 'taskId' in message && 'plan' in message
     && typeof message.taskId === 'string' && message.taskId.length > 0
     && typeof message.plan === 'string' && message.plan.trim().length > 0
@@ -70,10 +73,10 @@ export type PolicyDecision = {
   overrode?: boolean;
 };
 export type RouterTier = 'gemma' | 'ollama' | 'rules';
-export type RouterResult = { route: Route; tier: RouterTier };
+export type RouterResult = { route: Route; tier: RouterTier; notice?: string };
 export type ExtensionMessage =
   | { type: 'contextPreview'; requestId: number; parts: ContextPart[]; limit: number }
-  | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean }
+  | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean; notice?: string }
   | { type: 'routeError'; requestId: number }
   | { type: 'prefillDemo'; text: string };
 
@@ -81,7 +84,7 @@ export function isPanelMessage(message: unknown): message is PanelMessage {
   if (typeof message !== 'object' || message === null
     || !('text' in message) || typeof message.text !== 'string'
     || !('requestId' in message) || !Number.isSafeInteger(message.requestId)
-    || !('type' in message)) return false;
+    || !('type' in message) || !('demo' in message) || typeof message.demo !== 'boolean') return false;
   return message.type === 'previewContext' || (message.type === 'routeTask'
     && 'sources' in message && Array.isArray(message.sources)
     && message.sources.every((source: unknown) => typeof source === 'string'));

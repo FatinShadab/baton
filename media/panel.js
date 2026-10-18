@@ -13,6 +13,8 @@
   const refresh = document.getElementById('refresh-context');
   const planChatgpt = document.getElementById('plan-chatgpt');
   const planGemini = document.getElementById('plan-gemini');
+  const planClaude = document.getElementById('plan-claude');
+  const planAntigravity = document.getElementById('plan-antigravity');
   const planSection = document.getElementById('plan-section');
   const planText = document.getElementById('plan-text');
   const savePlanBtn = document.getElementById('save-plan');
@@ -20,6 +22,11 @@
   const planStatus = document.getElementById('plan-status');
   const micBtn = document.getElementById('mic-btn');
   const demoBtn = document.getElementById('demo-btn');
+  const demoModeChip = document.getElementById('demo-mode-chip');
+  const mcpBtn = document.getElementById('mcp-btn');
+  const mcpConnection = document.getElementById('mcp-connection');
+  const mcpEndpoint = document.getElementById('mcp-endpoint-value');
+  const mcpCopyConfig = document.getElementById('mcp-copy-config');
   const controls = document.getElementById('task-controls');
   const taskStatus = document.getElementById('task-status');
   const taskOutcome = document.getElementById('task-outcome');
@@ -37,10 +44,20 @@
   let mediaRecorder = null;
   let audioChunks = [];
   let pendingAutoRoute = false;
+  let demoMode = false;
   const selected = new Set();
   const tiers = { gemma: 'via Gemma (AI Studio)', ollama: 'via Ollama', rules: 'via rules' };
 
-  task.value = vscode.getState()?.task ?? '';
+  const savedTask = vscode.getState()?.task ?? '';
+  task.value = savedTask === DEMO_TASK ? '' : savedTask;
+  if (savedTask === DEMO_TASK) vscode.setState({ task: '' });
+  mcpBtn.addEventListener('click', () => {
+    mcpBtn.disabled = true;
+    mcpBtn.textContent = 'Working…';
+    vscode.postMessage({ type: 'mcpToggle' });
+  });
+  mcpCopyConfig.addEventListener('click', () => vscode.postMessage({ type: 'mcpCopyConfig' }));
+  vscode.postMessage({ type: 'mcpStatusRequest' });
 
   // ---------------------------------------------------------------------------
   // Friendly Toast Notifications
@@ -164,8 +181,11 @@
     }
     const text = customText || DEMO_TASK;
     task.value = text;
-    vscode.setState({ task: text });
     task.dispatchEvent(new Event('input'));
+    // A demo task must not reappear as a saved draft after the sidebar reloads.
+    vscode.setState({ task: '' });
+    demoMode = true;
+    demoModeChip.hidden = false;
     task.focus();
     showToast('Demo task loaded! Ready to prepare context & route.', 'info', 3000);
   }
@@ -178,6 +198,8 @@
   // Task Input & Preview
   // ---------------------------------------------------------------------------
   task.addEventListener('input', () => {
+    demoMode = false;
+    demoModeChip.hidden = true;
     vscode.setState({ task: task.value });
     card.hidden = true;
     if (overrideCard) overrideCard.hidden = true;
@@ -219,7 +241,7 @@
     if (overrideCard) overrideCard.hidden = true;
     submit.innerHTML = '<span class="spinner"></span> Preparing context…';
     status.innerHTML = '<span class="spinner"></span> Preparing local context…';
-    vscode.postMessage({ type: 'previewContext', text: task.value, requestId: ++requestId });
+    vscode.postMessage({ type: 'previewContext', text: task.value, requestId: ++requestId, demo: demoMode });
   }
 
   refresh.addEventListener('click', prepareContext);
@@ -300,13 +322,35 @@
     if (overrideCard) overrideCard.hidden = true;
     submit.innerHTML = '<span class="spinner"></span> Routing task…';
     status.innerHTML = '<span class="spinner"></span> Routing task via Gemma…';
-    vscode.postMessage({ type: 'routeTask', text: task.value, requestId, sources: [...selected] });
+    vscode.postMessage({ type: 'routeTask', text: task.value, requestId, sources: [...selected], demo: demoMode });
   });
 
   // ---------------------------------------------------------------------------
   // Message Handling
   // ---------------------------------------------------------------------------
   window.addEventListener('message', ({ data }) => {
+    if (data?.type === 'handoffAvailability') {
+      planChatgpt.textContent = data.installed?.chatgpt ? '💬 Plan in Codex' : '💬 Plan in ChatGPT';
+      planChatgpt.title = data.installed?.chatgpt ? 'Open the Codex extension with the prompt copied' : 'Open ChatGPT in a browser with the prompt copied';
+      planClaude.hidden = !data.installed?.claude;
+      planAntigravity.hidden = !data.installed?.antigravity;
+      planAntigravity.title = 'Open Antigravity with the prompt copied for pasting';
+      return;
+    }
+    if (data?.type === 'handoffResult') {
+      planStatus.textContent = data.notice || '';
+      showToast(data.notice || 'Prompt ready.', 'info', 4000);
+      return;
+    }
+    if (data?.type === 'mcpStatus') {
+      mcpBtn.disabled = false;
+      mcpBtn.textContent = data.running ? 'Stop MCP' : 'Start MCP';
+      mcpBtn.title = data.running ? 'Stop the Baton MCP server' : 'Start the Baton MCP server';
+      mcpConnection.hidden = !data.running;
+      mcpEndpoint.textContent = data.running ? `${data.command} "${data.endpoint}"` : '';
+      if (data.notice) showToast(data.notice, data.running ? 'success' : 'info', 3500);
+      return;
+    }
     if (data?.type === 'prefillDemo') {
       loadDemoTask(data.text);
       return;
@@ -459,8 +503,8 @@
     currentTaskId = data.taskId || '';
     submit.disabled = false;
     submit.textContent = 'Route task';
-    status.textContent = data.saved ? 'Saved to memory. Choose handoff below or run via Codex.'
-      : 'Route ready, but local memory could not be saved.';
+    status.textContent = (data.saved ? 'Saved to memory. Choose handoff below or run via Codex.'
+      : 'Route ready, but local memory could not be saved.') + (data.notice ? ` ${data.notice}` : '');
 
     if (data.text !== task.value) return;
 
@@ -492,6 +536,9 @@
 
     const routerTierEl = document.getElementById('router-tier');
     if (routerTierEl) routerTierEl.textContent = tiers[data.tier] ?? '';
+    const routerNotice = document.getElementById('router-notice');
+    routerNotice.textContent = data.notice || '';
+    routerNotice.hidden = !data.notice;
 
     // Small "Router: Gemma | Ollama | Rules" chip
     updateRouterChip(data.tier);
@@ -530,19 +577,14 @@
   // ---------------------------------------------------------------------------
   // External Planning Handoff
   // ---------------------------------------------------------------------------
-  planChatgpt.addEventListener('click', () => {
-    if (!currentTaskId) return;
-    planSection.hidden = false;
-    showToast('Opening ChatGPT with task prompt copied...', 'info', 2500);
-    vscode.postMessage({ type: 'planExternal', target: 'chatgpt', taskId: currentTaskId });
-  });
-
-  planGemini.addEventListener('click', () => {
-    if (!currentTaskId) return;
-    planSection.hidden = false;
-    showToast('Opening Gemini with task prompt copied...', 'info', 2500);
-    vscode.postMessage({ type: 'planExternal', target: 'gemini', taskId: currentTaskId });
-  });
+  for (const [button, target] of [[planChatgpt, 'chatgpt'], [planGemini, 'gemini'],
+    [planClaude, 'claude'], [planAntigravity, 'antigravity']]) {
+    button.addEventListener('click', () => {
+      if (!currentTaskId) return;
+      planSection.hidden = false;
+      vscode.postMessage({ type: 'planExternal', target, taskId: currentTaskId });
+    });
+  }
 
   useClipboardBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'readClipboard' });
@@ -570,4 +612,5 @@
     planStatus.innerHTML = '<span class="spinner"></span> Saving plan…';
     vscode.postMessage({ type: 'savePlan', taskId: currentTaskId, plan });
   });
+  vscode.postMessage({ type: 'handoffAvailabilityRequest' });
 })();

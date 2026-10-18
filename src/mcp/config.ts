@@ -8,11 +8,11 @@ type McpApi = {
     id: string, provider: { provideMcpServerDefinitions: () => McpDefinition[] },
   ) => vscode.Disposable };
   McpStdioServerDefinition?: new (
-    label: string, command: string, args?: string[], env?: Record<string, string>, version?: string,
+    options: { label: string; command: string; args: string[]; env: Record<string, string>; cwd: vscode.Uri },
   ) => McpDefinition;
 };
 
-function serverOptions(context: vscode.ExtensionContext) {
+export function serverOptions(context: vscode.ExtensionContext) {
   const root = vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri
     ?? context.extensionUri;
   return {
@@ -44,8 +44,7 @@ export function registerMcpProvider(context: vscode.ExtensionContext): void {
     context.subscriptions.push(api.lm.registerMcpServerDefinitionProvider(PROVIDER_ID, {
       provideMcpServerDefinitions: () => {
         const { command, args, env, cwd } = serverOptions(context);
-        const definition = new api.McpStdioServerDefinition!('Baton project context', command, args, env);
-        definition.cwd = cwd;
+        const definition = new api.McpStdioServerDefinition!({ label: 'Baton project context', command, args, env, cwd });
         return [definition];
       },
     }));

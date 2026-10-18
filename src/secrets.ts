@@ -3,6 +3,29 @@ import * as vscode from 'vscode';
 export const KEY_NAMES = ['GEMINI_API_KEY', 'OLLAMA_API_KEY', 'ELEVENLABS_API_KEY'] as const;
 export type KeyName = typeof KEY_NAMES[number];
 
+// F5 runs the extension from this repository, not from the demo workspace.
+// Import only known keys into SecretStorage; never expose .env to task context.
+export async function importDevelopmentKeys(context: vscode.ExtensionContext): Promise<void> {
+  if (context.extensionMode !== vscode.ExtensionMode.Development) return;
+  try {
+    const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(context.extensionUri, '.env'));
+    const source = Buffer.from(bytes).toString('utf8');
+    for (const line of source.split(/\r?\n/)) {
+      const match = line.match(/^\s*(?:export\s+)?(GEMINI_API_KEY|OLLAMA_API_KEY|ELEVENLABS_API_KEY)\s*=\s*(.*)$/);
+      if (!match) continue;
+      let value = match[2].trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      } else {
+        value = value.replace(/\s+#.*$/, '').trim();
+      }
+      if (value) await setKey(context.secrets, match[1] as KeyName, value);
+    }
+  } catch {
+    // No development .env, or unavailable storage: existing keys remain usable.
+  }
+}
+
 export async function getKey(secrets: vscode.SecretStorage, name: KeyName): Promise<string | undefined> {
   try {
     const val = await secrets.get(name);

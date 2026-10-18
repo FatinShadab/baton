@@ -4,3 +4,4 @@ out/
 *.vsix
 prompt_outputs.md
 .env
+.vscode/*

@@ -11,9 +11,32 @@
   <header class="app-header">
     <div class="header-main">
       <h1 class="app-title">Baton</h1>
-      <span class="stage-chip">Demo</span>
+      <div class="header-actions">
+        <button id="mcp-btn" type="button" class="action-btn" title="Start or stop the Baton MCP server">Start MCP</button>
+        <span id="demo-mode-chip" class="stage-chip" hidden>Demo</span>
+      </div>
     </div>
   </header>
+
+  <div id="mcp-connection" class="mcp-connection" hidden>
+    <span class="mcp-active-dot" aria-hidden="true"></span>
+    <div class="mcp-endpoint">
+      <span class="mcp-endpoint-label">MCP active · stdio endpoint</span>
+      <code id="mcp-endpoint-value"></code>
+    </div>
+    <div class="mcp-help">
+      <button type="button" class="mcp-hint-button" aria-label="How to connect to Baton MCP" aria-describedby="mcp-hint">?</button>
+      <div id="mcp-hint" class="mcp-hint" role="group" aria-label="MCP connection steps">
+        <strong>Connect an MCP client</strong>
+        <ol>
+          <li>Copy the Baton MCP configuration.</li>
+          <li>Paste it into your client's MCP server settings.</li>
+          <li>Reload the client and enable Baton's tools.</li>
+        </ol>
+        <button id="mcp-copy-config" type="button" class="btn-secondary">Copy config</button>
+      </div>
+    </div>
+  </div>
 
   <div class="tabs" role="tablist" aria-label="Baton views">
     <button id="task-tab" type="button" role="tab" aria-selected="true" aria-controls="task-pane">Task</button>
@@ -21,25 +44,22 @@
   </div>
 
   <section id="task-pane" role="tabpanel" aria-labelledby="task-tab">
-    <form id="task-form">
-      <div class="task-header">
-        <label for="task" class="field-label">Coding task</label>
-        <div class="task-header-actions">
-          <button id="demo-btn" type="button" class="action-btn demo-btn" title="Load sample demo task">⚡ Demo task</button>
-          <button id="mic-btn" type="button" class="action-btn mic-btn" title="Speak task" aria-label="Speak task">🎤</button>
-        </div>
-      </div>
-      <textarea id="task" rows="6" placeholder="What would you like to build?" required></textarea>
-      <button type="submit" id="submit-btn" class="btn-primary">Prepare context</button>
-      <details id="context-preview" class="context-card" hidden>
+    <div class="chat-watermark" aria-hidden="true">
+      <svg class="watermark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m6 16 10-10a2.12 2.12 0 0 1 3 3L9 19a2.12 2.12 0 0 1-3-3Z"/>
+        <path d="m13 9 3 3M5 5v4M3 7h4"/>
+      </svg>
+      <span class="watermark-title">Baton</span>
+    </div>
+
+    <details id="context-preview" class="context-card" hidden>
         <summary>What will be shared</summary>
         <p class="context-intro">The task above and the selected context below will be sent when you route.</p>
         <div id="context-sources" class="context-sources-list"></div>
         <p id="context-size" class="context-size-text"></p>
         <pre id="context-text" class="context-code"></pre>
         <button id="refresh-context" type="button" class="btn-secondary">Refresh context</button>
-      </details>
-    </form>
+    </details>
 
     <section id="result" role="status" aria-live="polite" aria-atomic="true">
       <p id="routing-status" class="status-msg"></p>
@@ -58,6 +78,7 @@
           </div>
           <span id="risk" class="risk"></span>
         </div>
+        <p id="router-notice" class="router-notice" hidden></p>
 
         <p id="router-tier" class="sr-only" aria-hidden="true"></p>
 
@@ -129,6 +150,8 @@
           <div id="handoff-buttons">
             <button id="plan-chatgpt" type="button" class="btn-handoff">💬 Plan in ChatGPT</button>
             <button id="plan-gemini" type="button" class="btn-handoff">✨ Plan in Gemini</button>
+            <button id="plan-claude" type="button" class="btn-handoff" hidden>✳ Plan in Claude Code</button>
+            <button id="plan-antigravity" type="button" class="btn-handoff" hidden>✦ Plan in Antigravity</button>
           </div>
         </div>
 
@@ -151,6 +174,17 @@
         </div>
       </article>
     </section>
+    <form id="task-form">
+      <div class="task-header">
+        <label for="task" class="field-label">Coding task</label>
+        <div class="task-header-actions">
+          <button id="demo-btn" type="button" class="action-btn demo-btn" title="Load sample demo task">⚡ Demo task</button>
+          <button id="mic-btn" type="button" class="action-btn mic-btn" title="Speak task" aria-label="Speak task">🎤</button>
+        </div>
+      </div>
+      <textarea id="task" rows="5" placeholder="What would you like to build?" required></textarea>
+      <button type="submit" id="submit-btn" class="btn-primary">Prepare context</button>
+    </form>
   </section>
 
   <section id="history-pane" role="tabpanel" aria-labelledby="history-tab" hidden>

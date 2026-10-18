@@ -34,6 +34,7 @@ export class TaskHistory {
       const indexed = await this.memory.add({ kind,
         text: kind === 'plan' ? `Task: ${task.text}\nPlan:\n${task.plan}` : this.completedText(task),
         meta: { taskId: task.id, taskText: task.text, risk: task.route.risk_tier, tier: task.routerTier,
+          workspaceUri: task.workspaceUri,
           ...(kind === 'task' ? { outcome: task.outcome, changedFiles: task.changedFiles } : {}) },
       });
       return indexed ? (kind === 'plan' ? 'Plan imported and added to memory.' : 'Completed task saved to memory.')

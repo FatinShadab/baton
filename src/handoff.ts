@@ -1,9 +1,25 @@
 import * as vscode from 'vscode';
 
+export type HandoffTarget = 'chatgpt' | 'gemini' | 'claude' | 'antigravity';
+
 const TARGETS: Record<'chatgpt' | 'gemini', string> = {
   chatgpt: 'https://chatgpt.com/',
   gemini: 'https://gemini.google.com/app',
 };
+
+const EXTENSIONS = {
+  chatgpt: 'openai.chatgpt',
+  claude: 'anthropic.claude-code',
+  antigravity: 'google.google-antigravity',
+} as const;
+
+export function handoffAvailability(): Record<keyof typeof EXTENSIONS, boolean> {
+  return {
+    chatgpt: Boolean(vscode.extensions.getExtension(EXTENSIONS.chatgpt)),
+    claude: Boolean(vscode.extensions.getExtension(EXTENSIONS.claude)),
+    antigravity: Boolean(vscode.extensions.getExtension(EXTENSIONS.antigravity)),
+  };
+}
 
 export function buildPlanPrompt(task: string, context: string): string {
   const sections = [
@@ -29,24 +45,43 @@ export function buildPlanPrompt(task: string, context: string): string {
 }
 
 export async function planExternal(
-  target: 'chatgpt' | 'gemini',
+  target: HandoffTarget,
   task: string,
   context: string,
-): Promise<void> {
+): Promise<string> {
   const prompt = buildPlanPrompt(task, context);
+  let copied = false;
   try {
     await vscode.env.clipboard.writeText(prompt);
+    copied = true;
   } catch {
-    void vscode.window.showErrorMessage('Baton could not copy the prompt to the clipboard.');
-    return;
+    // Claude Code can still receive its initial prompt directly.
   }
+
+  const installed = handoffAvailability();
   try {
+    if (target === 'claude' && installed.claude) {
+      await vscode.commands.executeCommand('claude-vscode.editor.open', undefined, prompt);
+      return 'Prompt added to Claude Code. Review it before sending.';
+    }
+    if (!copied) return 'Baton could not copy the prompt to the clipboard.';
+    if (target === 'chatgpt' && installed.chatgpt) {
+      await vscode.commands.executeCommand('chatgpt.openSidebar');
+      return 'Codex opened. Paste the copied prompt into its chat.';
+    }
+    if (target === 'antigravity' && installed.antigravity) {
+      await vscode.commands.executeCommand('antigravity.panel.focus');
+      return 'Antigravity opened. Paste the copied prompt into its chat.';
+    }
+    if (target === 'claude' || target === 'antigravity') {
+      return `${target === 'claude' ? 'Claude Code' : 'Antigravity'} is not installed. Prompt copied for manual use.`;
+    }
     await vscode.env.openExternal(vscode.Uri.parse(TARGETS[target]));
+    return 'Prompt copied. Paste it in the browser chat.';
   } catch {
-    void vscode.window.showWarningMessage('Prompt copied, but Baton could not open the browser.');
-    return;
+    return copied ? 'Prompt copied, but Baton could not open the target. Paste it manually.'
+      : 'Baton could not open the target or copy the prompt.';
   }
-  void vscode.window.showInformationMessage('Prompt copied. Paste it in the chat.');
 }
 
 export async function readClipboard(): Promise<string> {

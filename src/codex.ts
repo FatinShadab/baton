@@ -31,7 +31,8 @@ export class CodexRunner implements vscode.Disposable {
   private readonly pending = new Set<string>();
   private readonly terminals = new BatonTerminals();
 
-  constructor(private readonly store: JsonStore, private readonly history: TaskHistory) {}
+  constructor(private readonly store: JsonStore, private readonly history: TaskHistory,
+    private readonly extensionUri: vscode.Uri, private readonly extensionMode: vscode.ExtensionMode) {}
 
   async handle(message: TaskActionMessage): Promise<TaskActionReply> {
     let notice: string;
@@ -69,7 +70,11 @@ export class CodexRunner implements vscode.Disposable {
       const equal = (uri: vscode.Uri) => process.platform === 'win32'
         ? uri.toString().toLowerCase() === saved.toString().toLowerCase() : uri.toString() === saved.toString();
       const folder = folders.find((entry) => equal(entry.uri));
-      if (!folder) throw new Error('Reopen this task’s saved workspace before running workspace actions.');
+      if (!folder) {
+        const demoUri = vscode.Uri.joinPath(this.extensionUri, 'demo-repo');
+        if (this.extensionMode === vscode.ExtensionMode.Development && equal(demoUri)) return demoUri;
+        throw new Error('Reopen this task’s saved workspace before running workspace actions.');
+      }
       return folder.uri;
     }
     if (!folders.length) throw new Error('Open a local workspace folder first.');

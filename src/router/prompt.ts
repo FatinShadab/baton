@@ -20,5 +20,9 @@ export function routePrompt(task: string, ctxSnippet: string): string {
 }
 
 export function parseRouteJson(text: string): unknown {
-  return JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
+  const clean = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start < 0 || end < start) throw new SyntaxError('Route JSON object missing.');
+  return JSON.parse(clean.slice(start, end + 1));
 }

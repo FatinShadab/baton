@@ -1,38 +1,35 @@
-import { GoogleGenAI } from '@google/genai';
 import { parseRouteJson, ROUTE_INSTRUCTIONS, routePrompt } from './prompt';
-import { ROUTER_TIMEOUT_MS, withinDeadline } from './timeout';
+import { RouterHttpError, withinDeadline } from './timeout';
 
-const GEMMA_MODEL = 'gemma-4-26b-a4b-it';
-
-function rejectsFormat(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const { status, message } = error as { status?: number; message?: unknown };
-  if (typeof message !== 'string') return false;
-  const code = status ?? Number(message.match(/got status:\s*(\d{3})/i)?.[1]);
-  return (code === 400 || code === 422)
-    && /system[\s_]?instruction|system[\s_-]?(?:role|message)|response[\s_]?mime[\s_]?type|json[\s_-]?(?:mode|format)|application\/json/i.test(message);
-}
+const GEMMA_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent';
 
 export async function routeGemmaWithKey(apiKey: string, task: string, ctxSnippet: string): Promise<unknown> {
   return withinDeadline(async (signal) => {
-    const ai = new GoogleGenAI({ apiKey, vertexai: false });
-    const contents = routePrompt(task, ctxSnippet);
-    const config = { abortSignal: signal, httpOptions: { timeout: ROUTER_TIMEOUT_MS } };
-    let response;
-    try {
-      response = await ai.models.generateContent({
-        model: GEMMA_MODEL,
-        contents,
-        config: { ...config, systemInstruction: ROUTE_INSTRUCTIONS, responseMimeType: 'application/json' },
-      });
-    } catch (error) {
-      if (signal.aborted || !rejectsFormat(error)) throw error;
-      response = await ai.models.generateContent({
-        model: GEMMA_MODEL,
-        contents: `${ROUTE_INSTRUCTIONS}\n\nTask and context:\n${contents}`,
-        config,
-      });
+    const request = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: ROUTE_INSTRUCTIONS }] },
+        contents: [{ role: 'user', parts: [{ text: routePrompt(task, ctxSnippet) }] }],
+        generationConfig: { thinkingConfig: { thinkingLevel: 'minimal' } },
+      }),
+    };
+    let response = await fetch(GEMMA_URL, request);
+    if (response.status >= 500 && !signal.aborted) {
+      try { await response.body?.cancel(); } catch { /* Retry is still safe. */ }
+      response = await fetch(GEMMA_URL, request);
     }
-    return parseRouteJson(response.text ?? '');
+    if (!response.ok) throw new RouterHttpError(response.status);
+    const data: unknown = await response.json();
+    if (typeof data !== 'object' || data === null || !('candidates' in data) || !Array.isArray(data.candidates)) {
+      return undefined;
+    }
+    const first = data.candidates[0];
+    const parts: unknown = first?.content?.parts;
+    if (!Array.isArray(parts)) return undefined;
+    const text = parts.filter((part) => part && part.thought !== true && typeof part.text === 'string')
+      .map((part) => part.text).join('\n');
+    return text ? parseRouteJson(text) : undefined;
   });
 }

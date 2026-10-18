@@ -1,20 +1,29 @@
-export const ROUTER_TIMEOUT_MS = 8_000;
+export const ROUTER_TIMEOUT_MS = 30_000;
+
+export class RouterTimeoutError extends Error {
+  constructor() { super('Provider timed out.'); }
+}
+
+export class RouterHttpError extends Error {
+  constructor(readonly status: number) { super(`Provider returned HTTP ${status}.`); }
+}
+
+export class RouterMissingKeyError extends Error {
+  constructor() { super('API key is missing.'); }
+}
 
 /** Bound the whole tier, including key lookup, response reading, and compatibility retries. */
-export async function withinDeadline<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T | undefined> {
+export async function withinDeadline<T>(work: (signal: AbortSignal) => Promise<T>, timeoutMs = ROUTER_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const deadline = new Promise<undefined>((resolve) => {
+    const deadline = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort();
-        resolve(undefined);
-      }, ROUTER_TIMEOUT_MS);
+        reject(new RouterTimeoutError());
+      }, timeoutMs);
     });
     return await Promise.race([work(controller.signal), deadline]);
-  } catch {
-    // Provider, transport, and parsing failures all advance to the next tier.
-    return undefined;
   } finally {
     clearTimeout(timer);
     controller.abort();
