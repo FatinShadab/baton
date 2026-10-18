@@ -52,7 +52,8 @@
     "vscode:prepublish": "npm run check && npm run build",
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "eval": "esbuild scripts/eval.ts --bundle --platform=node --target=node18 --outfile=dist/eval.cjs && node dist/eval.cjs"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",

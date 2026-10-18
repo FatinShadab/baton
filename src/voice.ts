@@ -20,10 +20,7 @@ export async function transcribe(
     apiKey = await getKey(secretStore, 'ELEVENLABS_API_KEY');
   }
   if (!apiKey?.trim()) {
-    apiKey = process.env.ELEVENLABS_API_KEY;
-  }
-  if (!apiKey?.trim()) {
-    throw new Error('ElevenLabs API key is missing. Set it with "Baton: Set API Keys" or in .env');
+    throw new Error('ElevenLabs API key is missing. Set it with "Baton: Set API Keys".');
   }
 
   const formData = new FormData();

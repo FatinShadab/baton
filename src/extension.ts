@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
   let activeWebviewView: vscode.WebviewView | undefined;
   let pendingDemoTask: string | undefined;
 
-  const DEMO_TASK = 'Add a rate limiter to the Express API with Redis fallback and migrate user session tokens';
+  const DEMO_TASK = 'Fix the failing test in the date parser';
 
   const sendDemoTask = async (view: vscode.WebviewView, taskText: string) => {
     try {

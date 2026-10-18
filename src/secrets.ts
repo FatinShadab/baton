@@ -8,26 +8,7 @@ export async function getKey(secrets: vscode.SecretStorage, name: KeyName): Prom
     const val = await secrets.get(name);
     if (val?.trim()) return val.trim();
   } catch {
-    // proceed to fallbacks
-  }
-  if (process.env[name]?.trim()) {
-    return process.env[name]!.trim();
-  }
-  try {
-    const folders = vscode.workspace.workspaceFolders;
-    if (folders?.[0]) {
-      const envUri = vscode.Uri.joinPath(folders[0].uri, '.env');
-      const bytes = await vscode.workspace.fs.readFile(envUri);
-      const text = Buffer.from(bytes).toString('utf8');
-      const match = text.match(new RegExp(`^${name}\\s*=\\s*["']?([^"'\\r\\n]+)["']?`, 'm'));
-      if (match?.[1]?.trim()) {
-        const found = match[1].trim();
-        void secrets.store(name, found);
-        return found;
-      }
-    }
-  } catch {
-    // .env missing or unreadable
+    // Missing or unavailable SecretStorage leaves this provider disabled.
   }
   return undefined;
 }

@@ -27,7 +27,7 @@
   const overrideText = document.getElementById('policy-override-text');
   const toastContainer = document.getElementById('toast-container');
 
-  const DEMO_TASK = 'Add a rate limiter to the Express API with Redis fallback and migrate user session tokens';
+  const DEMO_TASK = 'Fix the failing test in the date parser';
 
   let requestId = 0;
   let ready = false;
