@@ -5,10 +5,31 @@ export type KeyName = typeof KEY_NAMES[number];
 
 export async function getKey(secrets: vscode.SecretStorage, name: KeyName): Promise<string | undefined> {
   try {
-    return await secrets.get(name);
+    const val = await secrets.get(name);
+    if (val?.trim()) return val.trim();
   } catch {
-    return undefined;
+    // proceed to fallbacks
   }
+  if (process.env[name]?.trim()) {
+    return process.env[name]!.trim();
+  }
+  try {
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders?.[0]) {
+      const envUri = vscode.Uri.joinPath(folders[0].uri, '.env');
+      const bytes = await vscode.workspace.fs.readFile(envUri);
+      const text = Buffer.from(bytes).toString('utf8');
+      const match = text.match(new RegExp(`^${name}\\s*=\\s*["']?([^"'\\r\\n]+)["']?`, 'm'));
+      if (match?.[1]?.trim()) {
+        const found = match[1].trim();
+        void secrets.store(name, found);
+        return found;
+      }
+    }
+  } catch {
+    // .env missing or unreadable
+  }
+  return undefined;
 }
 
 export async function setKey(secrets: vscode.SecretStorage, name: KeyName, value: string): Promise<boolean> {

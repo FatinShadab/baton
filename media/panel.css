@@ -6,6 +6,37 @@ body {
 }
 h1 { margin: 0 0 20px; font-size: 22px; }
 label { display: block; margin-bottom: 8px; }
+.task-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.task-header label { margin-bottom: 0; }
+.mic-button {
+  width: auto;
+  margin-top: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+  background: var(--vscode-button-secondaryBackground, #3a3d41);
+  color: var(--vscode-button-secondaryForeground, #ffffff);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.mic-button:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+.mic-button.recording { background: #cf222e; color: #fff; }
+.mic-button.recording::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse-dot 1s infinite ease-in-out;
+}
+@keyframes pulse-dot {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.6); }
+  100% { opacity: 1; transform: scale(1); }
+}
 textarea {
   box-sizing: border-box;
   width: 100%;

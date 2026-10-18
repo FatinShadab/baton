@@ -15,7 +15,10 @@
   </div>
   <section id="task-pane" role="tabpanel" aria-labelledby="task-tab">
   <form id="task-form">
-    <label for="task">Coding task</label>
+    <div class="task-header">
+      <label for="task">Coding task</label>
+      <button id="mic-btn" type="button" class="mic-button" title="Speak task" aria-label="Speak task">🎤</button>
+    </div>
     <textarea id="task" rows="8" placeholder="What would you like to build?" required></textarea>
     <button type="submit">Prepare context</button>
     <details id="context-preview" hidden>

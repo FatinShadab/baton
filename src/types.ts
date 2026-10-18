@@ -20,6 +20,20 @@ export type HandoffReply =
   | { type: 'planSaved'; taskId: string; notice: string }
   | { type: 'planSaveError'; message: string };
 
+export type VoiceMessage =
+  | { type: 'voiceAudio'; audioBase64: string; mime: string }
+  | { type: 'startVoiceFallback' };
+export type VoiceReply =
+  | { type: 'voiceText'; text: string; autoRoute: boolean }
+  | { type: 'voiceError'; message: string };
+
+export function isVoiceMessage(message: unknown): message is VoiceMessage {
+  if (typeof message !== 'object' || message === null || !('type' in message)) return false;
+  if (message.type === 'startVoiceFallback') return true;
+  return message.type === 'voiceAudio' && 'audioBase64' in message && typeof message.audioBase64 === 'string'
+    && (!('mime' in message) || typeof message.mime === 'string');
+}
+
 export function isHandoffMessage(message: unknown): message is HandoffMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
   if (message.type === 'readClipboard') return true;

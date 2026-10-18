@@ -4,17 +4,20 @@ import { setKeys } from './secrets';
 import { JsonStore } from './store';
 import { initializeRouter, routeTask } from './router';
 import { decide } from './policy';
-import { ExtensionMessage, isHandoffMessage, isHistoryMessage, isPanelMessage } from './types';
+import { ExtensionMessage, isHandoffMessage, isHistoryMessage, isPanelMessage, isVoiceMessage } from './types';
 import { buildContext, BuiltContext, MAX_CONTEXT_CHARS, selectContext } from './context';
 import { initializeMemory, MemoryStore } from './memory';
 import { TaskHistory } from './history';
 import { planExternal, readClipboard } from './handoff';
+import { FallbackServerSession, initVoice, startVoiceFallbackServer, transcribe } from './voice';
 
 export function activate(context: vscode.ExtensionContext): { store: JsonStore; memory: MemoryStore } {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
   const store = new JsonStore(context.globalStorageUri);
   const memory = initializeMemory(store);
   const history = new TaskHistory(store, memory);
+
+  initVoice(context.secrets);
 
   context.subscriptions.push(
     initializeRouter(context.secrets),
@@ -32,6 +35,18 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
         let preview: { requestId: number; text: string; context: BuiltContext } | undefined;
         let latestPreview = 0;
         let lastRouted: { taskId: string; text: string; snippet: string } | undefined;
+        let fallbackSession: FallbackServerSession | undefined;
+
+        const parseVoiceIntent = (raw: string): { text: string; autoRoute: boolean } => {
+          const trimmed = raw.trim();
+          const startsWithRoute = /^route\s+/i.test(trimmed);
+          const endsWithGo = /\s+go\.?$/i.test(trimmed);
+          let text = trimmed;
+          if (startsWithRoute) text = text.replace(/^route\s+/i, '');
+          else if (endsWithGo) text = text.replace(/\s+go\.?$/i, '');
+          return { text: text.trim(), autoRoute: startsWithRoute || endsWithGo };
+        };
+
         const listener = view.webview.onDidReceiveMessage(async (message: unknown) => {
           if (isHistoryMessage(message)) {
             try {
@@ -60,6 +75,37 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
               try {
                 await view.webview.postMessage({ type: 'planSaveError', message: 'Handoff action failed. Please try again.' });
               } catch { /* closed */ }
+            }
+            return;
+          }
+          if (isVoiceMessage(message)) {
+            try {
+              if (message.type === 'voiceAudio') {
+                const buffer = Buffer.from(message.audioBase64, 'base64');
+                const transcript = await transcribe(buffer, message.mime, context.secrets);
+                const { text, autoRoute } = parseVoiceIntent(transcript);
+                await view.webview.postMessage({ type: 'voiceText', text, autoRoute });
+              } else if (message.type === 'startVoiceFallback') {
+                if (fallbackSession) {
+                  fallbackSession.close();
+                  fallbackSession = undefined;
+                }
+                fallbackSession = await startVoiceFallbackServer(async (audioBuffer, mime) => {
+                  try {
+                    const transcript = await transcribe(audioBuffer, mime, context.secrets);
+                    const { text, autoRoute } = parseVoiceIntent(transcript);
+                    await view.webview.postMessage({ type: 'voiceText', text, autoRoute });
+                  } catch (err: unknown) {
+                    const errorMsg = err instanceof Error ? err.message : 'Transcription failed';
+                    await view.webview.postMessage({ type: 'voiceError', message: errorMsg });
+                  }
+                });
+                await vscode.env.openExternal(vscode.Uri.parse(fallbackSession.url));
+                void vscode.window.showInformationMessage('Recording in your browser, close the tab when done.');
+              }
+            } catch (err: unknown) {
+              const errorMsg = err instanceof Error ? err.message : 'Voice recording error';
+              await view.webview.postMessage({ type: 'voiceError', message: errorMsg });
             }
             return;
           }
@@ -103,7 +149,13 @@ export function activate(context: vscode.ExtensionContext): { store: JsonStore; 
             // A closed sidebar can no longer receive messages.
           }
         });
-        view.onDidDispose(() => listener.dispose());
+        view.onDidDispose(() => {
+          listener.dispose();
+          if (fallbackSession) {
+            fallbackSession.close();
+            fallbackSession = undefined;
+          }
+        });
 
         try {
           const template = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(mediaRoot, 'panel.html'));

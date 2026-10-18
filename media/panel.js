@@ -16,11 +16,15 @@
   const savePlanBtn = document.getElementById('save-plan');
   const useClipboardBtn = document.getElementById('use-clipboard');
   const planStatus = document.getElementById('plan-status');
+  const micBtn = document.getElementById('mic-btn');
   let requestId = 0;
   let ready = false;
   let parts = [];
   let limit = 6000;
   let currentTaskId = '';
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let pendingAutoRoute = false;
   const selected = new Set();
   const tiers = { gemma: 'via Gemma (AI Studio)', ollama: 'via Ollama', rules: 'via rules' };
   task.value = vscode.getState()?.task ?? '';
@@ -39,6 +43,7 @@
     planSection.hidden = true;
     planText.value = '';
     planStatus.textContent = '';
+    pendingAutoRoute = false;
   });
 
   function updatePreview() {
@@ -60,6 +65,57 @@
     vscode.postMessage({ type: 'previewContext', text: task.value, requestId: ++requestId });
   }
   refresh.addEventListener('click', prepareContext);
+
+  if (micBtn) {
+    micBtn.addEventListener('click', async () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        micBtn.disabled = true;
+        micBtn.classList.remove('recording');
+        status.textContent = 'Processing speech…';
+        return;
+      }
+
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        status.textContent = 'Opening browser for voice input…';
+        vscode.postMessage({ type: 'startVoiceFallback' });
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) audioChunks.push(event.data);
+        };
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach((track) => track.stop());
+          micBtn.disabled = false;
+          micBtn.classList.remove('recording');
+          const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = typeof reader.result === 'string' ? reader.result.split(',')[1] : '';
+            if (base64) {
+              status.textContent = 'Transcribing voice…';
+              vscode.postMessage({ type: 'voiceAudio', audioBase64: base64, mime: blob.type });
+            } else {
+              status.textContent = 'Could not read audio data.';
+            }
+          };
+          reader.readAsDataURL(blob);
+        };
+        mediaRecorder.start();
+        micBtn.classList.add('recording');
+        status.textContent = 'Listening… click mic again when done.';
+      } catch {
+        status.textContent = 'Webview mic restricted. Opening browser…';
+        vscode.postMessage({ type: 'startVoiceFallback' });
+      }
+    });
+  }
+
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     if (!task.value.trim() || submit.disabled) return;
@@ -74,10 +130,41 @@
     status.textContent = 'Routing task…';
     vscode.postMessage({ type: 'routeTask', text: task.value, requestId, sources: [...selected] });
   });
+
   window.addEventListener('message', ({ data }) => {
     if (data?.type === 'history' && data.changed) {
       // A newly imported plan must be included in a fresh context snapshot.
       task.dispatchEvent(new Event('input'));
+      return;
+    }
+    if (data?.type === 'voiceText') {
+      if (micBtn) {
+        micBtn.disabled = false;
+        micBtn.classList.remove('recording');
+      }
+      const spoken = (data.text || '').trim();
+      if (spoken) {
+        const prev = task.value.trim();
+        task.value = prev ? `${prev} ${spoken}` : spoken;
+        vscode.setState({ task: task.value });
+        task.dispatchEvent(new Event('input'));
+        status.textContent = `Transcribed: "${spoken}"`;
+        if (data.autoRoute) {
+          pendingAutoRoute = true;
+          status.textContent = `Auto-routing: "${spoken}"…`;
+          form.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
+      } else {
+        status.textContent = 'No speech detected.';
+      }
+      return;
+    }
+    if (data?.type === 'voiceError') {
+      if (micBtn) {
+        micBtn.disabled = false;
+        micBtn.classList.remove('recording');
+      }
+      status.textContent = data.message || 'Voice transcription error.';
       return;
     }
     if (data?.type === 'clipboardContent') {
@@ -129,6 +216,10 @@
       preview.open = true;
       status.textContent = 'Review the sources, then route your task.';
       updatePreview();
+      if (pendingAutoRoute) {
+        pendingAutoRoute = false;
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
       return;
     }
     refresh.disabled = false;
