@@ -8,7 +8,7 @@ type Risk = Route['risk_tier'];
 type Example = { task: string; expected: Risk };
 
 const examples: Example[] = [
-  { task: 'Fix the failing test in the date parser', expected: 'moderate' },
+  { task: 'Fix the failing test in the URL validator', expected: 'moderate' },
   { task: 'Explain how the date parser handles UTC dates', expected: 'low' },
   { task: 'Review the parser for edge cases without changing code', expected: 'low' },
   { task: 'Add tests for invalid calendar dates', expected: 'moderate' },

@@ -4,7 +4,7 @@ Ten hand-labeled coding tasks. Predictions are raw router risk tiers before the 
 
 | # | Task | Expected | Rules | Gemma 4 |
 |---:|---|---|---|---|
-| 1 | Fix the failing test in the date parser | moderate | moderate | N/A |
+| 1 | Fix the failing test in the URL validator | moderate | moderate | N/A |
 | 2 | Explain how the date parser handles UTC dates | low | low | N/A |
 | 3 | Review the parser for edge cases without changing code | low | low | N/A |
 | 4 | Add tests for invalid calendar dates | moderate | moderate | N/A |

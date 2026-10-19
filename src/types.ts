@@ -1,10 +1,10 @@
 import type { ContextPart } from './context';
 
 export type PanelMessage =
-  | { type: 'previewContext'; text: string; requestId: number; demo: boolean }
-  | { type: 'routeTask'; text: string; requestId: number; sources: string[]; demo: boolean };
+  | { type: 'previewContext'; text: string; requestId: number }
+  | { type: 'routeTask'; text: string; requestId: number; sources: string[] };
 export type HistoryMessage =
-  | { type: 'loadHistory'; demo?: boolean }
+  | { type: 'loadHistory' }
   | { type: 'importPlan'; taskId: string; plan: string };
 export type TaskAction = 'runCodex' | 'markDone' | 'showDiff' | 'runTests';
 export type TaskActionMessage = { type: TaskAction; taskId: string };
@@ -63,7 +63,7 @@ export function isHandoffMessage(message: unknown): message is HandoffMessage {
 
 export function isHistoryMessage(message: unknown): message is HistoryMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
-  if (message.type === 'loadHistory') return !('demo' in message) || typeof message.demo === 'boolean';
+  if (message.type === 'loadHistory') return true;
   if (!('taskId' in message) || typeof message.taskId !== 'string' || !message.taskId) return false;
   return message.type === 'importPlan' && 'plan' in message && typeof message.plan === 'string'
     && message.plan.trim().length > 0 && Buffer.byteLength(message.plan, 'utf8') <= 100 * 1024;
@@ -79,14 +79,13 @@ export type RouterResult = { route: Route; tier: RouterTier; notice?: string };
 export type ExtensionMessage =
   | { type: 'contextPreview'; requestId: number; parts: ContextPart[]; limit: number }
   | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean; notice?: string }
-  | { type: 'routeError'; requestId: number }
-  | { type: 'prefillDemo'; text: string };
+  | { type: 'routeError'; requestId: number };
 
 export function isPanelMessage(message: unknown): message is PanelMessage {
   if (typeof message !== 'object' || message === null
     || !('text' in message) || typeof message.text !== 'string'
     || !('requestId' in message) || !Number.isSafeInteger(message.requestId)
-    || !('type' in message) || !('demo' in message) || typeof message.demo !== 'boolean') return false;
+    || !('type' in message)) return false;
   return message.type === 'previewContext' || (message.type === 'routeTask'
     && 'sources' in message && Array.isArray(message.sources)
     && message.sources.every((source: unknown) => typeof source === 'string'));

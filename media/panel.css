@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Baton — Stage Demo Theme & Panel Styles
+   Baton — Panel Styles
    Tailored for high readability on projectors in both Dark and Light themes.
    ========================================================================== */
 
@@ -27,7 +27,7 @@ body {
   overflow-wrap: anywhere;
 }
 
-/* Header & Demo Branding */
+/* Header */
 .app-header {
   margin-bottom: 12px;
 }
@@ -120,21 +120,6 @@ body {
   letter-spacing: -0.3px;
   color: var(--vscode-foreground);
 }
-
-.stage-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: var(--baton-radius-full);
-  background: var(--vscode-badge-background, rgba(127, 127, 127, 0.2));
-  color: var(--vscode-badge-foreground, var(--vscode-foreground));
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.stage-chip[hidden] { display: none; }
 
 /* Navigation Tabs */
 .tabs {
@@ -281,10 +266,6 @@ body {
 
 .action-btn:hover {
   background: var(--vscode-button-secondaryHoverBackground, rgba(127, 127, 127, 0.25));
-}
-
-.demo-btn {
-  color: var(--vscode-textLink-foreground, #3794ff);
 }
 
 textarea {
@@ -447,7 +428,7 @@ button:focus-visible {
 }
 
 /* ==========================================================================
-   Route Result Card (Clean Stage Demo Card)
+   Route Result Card
    ========================================================================== */
 .route-card {
   margin-top: 16px;
@@ -532,7 +513,7 @@ button:focus-visible {
   color: var(--vscode-button-foreground, #ffffff);
 }
 
-/* Risk Badges (Stage Demo High Contrast) */
+/* Risk Badges */
 .risk {
   display: inline-flex;
   align-items: center;

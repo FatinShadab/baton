@@ -33,7 +33,7 @@ export async function clearPersonalKey(secrets: vscode.SecretStorage, provider: 
   }
 }
 
-// F5 runs the extension from this repository, not from the demo workspace.
+// F5 runs the extension from this repository.
 // Import only known keys into SecretStorage; never expose .env to task context.
 export async function importDevelopmentKeys(context: vscode.ExtensionContext): Promise<void> {
   if (context.extensionMode !== vscode.ExtensionMode.Development) return;

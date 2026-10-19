@@ -19,8 +19,6 @@
   const handoffFallback = document.getElementById('handoff-fallback');
   const openHandoffExternal = document.getElementById('open-handoff-external');
   const micBtn = document.getElementById('mic-btn');
-  const demoBtn = document.getElementById('demo-btn');
-  const demoModeChip = document.getElementById('demo-mode-chip');
   const mcpBtn = document.getElementById('mcp-btn');
   const mcpConnection = document.getElementById('mcp-connection');
   const mcpEndpoint = document.getElementById('mcp-endpoint-value');
@@ -33,21 +31,16 @@
   const toastContainer = document.getElementById('toast-container');
   const settingsStatus = document.getElementById('settings-status');
 
-  const DEMO_TASK = 'Fix the failing test in the date parser';
-
   let requestId = 0;
   let ready = false;
   let parts = [];
   let limit = 6000;
   let currentTaskId = '';
   let pendingAutoRoute = false;
-  let demoMode = false;
   const selected = new Set();
   const tiers = { gemma: 'via Gemma (AI Studio)', ollama: 'via Ollama', rules: 'via rules' };
 
-  const savedTask = vscode.getState()?.task ?? '';
-  task.value = savedTask === DEMO_TASK ? '' : savedTask;
-  if (savedTask === DEMO_TASK) vscode.setState({ task: '' });
+  task.value = vscode.getState()?.task ?? '';
   mcpBtn.addEventListener('click', () => {
     mcpBtn.disabled = true;
     mcpBtn.textContent = 'Working…';
@@ -192,36 +185,11 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Demo Task Prefill
-  // ---------------------------------------------------------------------------
-  function loadDemoTask(customText) {
-    const taskTab = document.getElementById('task-tab');
-    if (taskTab && taskTab.getAttribute('aria-selected') !== 'true') {
-      taskTab.click();
-    }
-    const text = customText || DEMO_TASK;
-    task.value = text;
-    task.dispatchEvent(new Event('input'));
-    // A demo task must not reappear as a saved draft after the sidebar reloads.
-    vscode.setState({ task: '' });
-    demoMode = true;
-    demoModeChip.hidden = false;
-    task.focus();
-    showToast('Demo task loaded! Ready to prepare context & route.', 'info', 3000);
-  }
-
-  if (demoBtn) {
-    demoBtn.addEventListener('click', () => loadDemoTask());
-  }
-
-  // ---------------------------------------------------------------------------
   // Task Input & Preview
   // ---------------------------------------------------------------------------
   task.addEventListener('input', () => {
     handoffFallback.hidden = true;
     openHandoffExternal.dataset.target = '';
-    demoMode = false;
-    demoModeChip.hidden = true;
     vscode.setState({ task: task.value });
     card.hidden = true;
     if (overrideCard) overrideCard.hidden = true;
@@ -263,7 +231,7 @@
     if (overrideCard) overrideCard.hidden = true;
     submit.innerHTML = '<span class="spinner"></span> Preparing context…';
     status.innerHTML = '<span class="spinner"></span> Preparing local context…';
-    vscode.postMessage({ type: 'previewContext', text: task.value, requestId: ++requestId, demo: demoMode });
+    vscode.postMessage({ type: 'previewContext', text: task.value, requestId: ++requestId });
   }
 
   refresh.addEventListener('click', prepareContext);
@@ -301,7 +269,7 @@
     if (overrideCard) overrideCard.hidden = true;
     submit.innerHTML = '<span class="spinner"></span> Routing task…';
     status.innerHTML = '<span class="spinner"></span> Routing task via Gemma…';
-    vscode.postMessage({ type: 'routeTask', text: task.value, requestId, sources: [...selected], demo: demoMode });
+    vscode.postMessage({ type: 'routeTask', text: task.value, requestId, sources: [...selected] });
   });
 
   // ---------------------------------------------------------------------------
@@ -347,11 +315,6 @@
       if (data.notice) showToast(data.notice, data.running ? 'success' : 'info', 3500);
       return;
     }
-    if (data?.type === 'prefillDemo') {
-      loadDemoTask(data.text);
-      return;
-    }
-
     if (data?.type === 'taskActionResult') {
       if (data.taskId === currentTaskId) {
         taskStatus.textContent = data.notice;

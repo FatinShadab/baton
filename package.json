@@ -26,10 +26,6 @@
         "title": "Baton: Focus"
       },
       {
-        "command": "baton.demo",
-        "title": "Baton: Load Demo Task"
-      },
-      {
         "command": "baton.copyMcpConfig",
         "title": "Baton: Copy MCP Config"
       }

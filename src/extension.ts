@@ -23,7 +23,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
   const store = new JsonStore(context.globalStorageUri);
   const memory = initializeMemory(store);
   const history = new TaskHistory(store, memory);
-  const codex = new CodexRunner(store, history, context.extensionUri, context.extensionMode);
+  const codex = new CodexRunner(store, history);
   const mcp = new McpSession(context);
 
   const availableDestinations = async () => ({
@@ -34,25 +34,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
   initVoice(context.secrets);
   registerMcpProvider(context);
 
-  let activeWebviewView: vscode.WebviewView | undefined;
-  let pendingDemoTask: string | undefined;
-
-  const DEMO_TASK = 'Fix the failing test in the date parser';
-
-  const historyProject = (demo = false): { uri: string; name: string } | undefined => {
-    if (demo) return { uri: vscode.Uri.joinPath(context.extensionUri, 'demo-repo').toString(), name: 'demo-repo' };
+  const historyProject = (): { uri: string; name: string } | undefined => {
     const editor = vscode.window.activeTextEditor;
     const folder = (editor && vscode.workspace.getWorkspaceFolder(editor.document.uri))
       ?? vscode.workspace.workspaceFolders?.find((entry) => entry.uri.scheme === 'file');
     return folder?.uri.scheme === 'file' ? { uri: folder.uri.toString(), name: folder.name } : undefined;
-  };
-
-  const sendDemoTask = async (view: vscode.WebviewView, taskText: string) => {
-    try {
-      await view.webview.postMessage({ type: 'prefillDemo', text: taskText });
-    } catch {
-      // A closed sidebar can no longer receive messages.
-    }
   };
 
   context.subscriptions.push(
@@ -68,38 +54,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
         void vscode.window.showErrorMessage('Baton could not open the sidebar. Please try again.');
       }
     }),
-    vscode.commands.registerCommand('baton.demo', async () => {
-      try {
-        await vscode.commands.executeCommand('baton.panel.focus');
-      } catch {
-        void vscode.window.showErrorMessage('Baton could not open the sidebar. Please try again.');
-      }
-      if (activeWebviewView) {
-        await sendDemoTask(activeWebviewView, DEMO_TASK);
-      } else {
-        pendingDemoTask = DEMO_TASK;
-      }
-    }),
     vscode.window.registerWebviewViewProvider('baton.panel', {
       async resolveWebviewView(view) {
-        activeWebviewView = view;
-        if (pendingDemoTask) {
-          const taskToDeliver = pendingDemoTask;
-          pendingDemoTask = undefined;
-          setTimeout(() => {
-            void sendDemoTask(view, taskToDeliver);
-          }, 250);
-        }
         view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
-        let preview: { requestId: number; text: string; demo: boolean; context: BuiltContext } | undefined;
+        let preview: { requestId: number; text: string; context: BuiltContext } | undefined;
         let latestPreview = 0;
         let lastRouted: { taskId: string; text: string; snippet: string } | undefined;
         let recorderSession: VoiceRecorderSession | undefined;
-        let historyDemo = false;
-
         const refreshHistory = async () => {
           try {
-            await view.webview.postMessage(await history.handle({ type: 'loadHistory' }, historyProject(historyDemo)));
+            await view.webview.postMessage(await history.handle({ type: 'loadHistory' }, historyProject()));
           } catch { /* A closed sidebar can no longer receive messages. */ }
         };
 
@@ -159,8 +123,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
           }
           if (isHistoryMessage(message)) {
             try {
-              if (message.type === 'loadHistory') historyDemo = message.demo === true;
-              await view.webview.postMessage(await history.handle(message, historyProject(historyDemo)));
+              await view.webview.postMessage(await history.handle(message, historyProject()));
             } catch { /* A closed sidebar can no longer receive messages. */ }
             return;
           }
@@ -236,15 +199,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
             if (message.type === 'previewContext') {
               const generation = ++latestPreview;
               preview = undefined;
-              const collected = await buildContext(message.text, message.demo, context.extensionUri);
+              const collected = await buildContext(message.text);
               if (generation !== latestPreview) return;
-              preview = { requestId: message.requestId, text: message.text, demo: message.demo, context: collected };
+              preview = { requestId: message.requestId, text: message.text, context: collected };
               await view.webview.postMessage({ type: 'contextPreview', requestId: message.requestId,
                 parts: collected.parts, limit: MAX_CONTEXT_CHARS } satisfies ExtensionMessage);
               return;
             }
-            if (!preview || preview.requestId !== message.requestId || preview.text !== message.text
-              || preview.demo !== message.demo) {
+            if (!preview || preview.requestId !== message.requestId || preview.text !== message.text) {
               throw new Error('Prepare a context preview before routing.');
             }
             const snippet = selectContext(preview.context, message.sources);
@@ -282,9 +244,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
         const editorListener = vscode.window.onDidChangeActiveTextEditor(() => { void refreshHistory(); });
         const workspaceListener = vscode.workspace.onDidChangeWorkspaceFolders(() => { void refreshHistory(); });
         view.onDidDispose(() => {
-          if (activeWebviewView === view) {
-            activeWebviewView = undefined;
-          }
           listener.dispose();
           extensionListener.dispose();
           editorListener.dispose();

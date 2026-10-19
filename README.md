@@ -86,9 +86,7 @@ The MCP tools are read-only. Each server uses its project root to filter Baton's
 
 Baton saves tasks, plans, outcomes, and memory as JSON under VS Code's `context.globalStorageUri`. Context preparation is local; routing sends the selected excerpt to the active model provider. Sensitive paths and data are excluded from context, including `.env`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `node_modules`, and `.git`; files over 100 KB are skipped. Running a task requires a trusted workspace and any confirmation required by the policy gate.
 
-## Demo and development
-
-The **Demo task** button explicitly selects the bundled [`demo-repo`](demo-repo). It is separate from ordinary tasks, which use the open workspace. In the demo project, `npm test` shows a failing date parser test to use for a complete routing, planning, execution, and review walkthrough.
+## Development
 
 To run the standalone routing evaluation, use `npm run eval`. It writes [`eval-results.md`](eval-results.md); the labeled cases are in [`scripts/eval.ts`](scripts/eval.ts). Live Gemma evaluation requires a `GEMINI_API_KEY` process environment variable. Without one, live model results are marked unavailable.
 

@@ -5,7 +5,6 @@ function initializeHistory(vscode, taskActions) {
   const status = document.getElementById('history-status');
   const project = document.getElementById('history-project');
   const refresh = document.getElementById('refresh-history');
-  const demoChip = document.getElementById('demo-mode-chip');
   const expanded = new Set();
   const drafts = new Map();
   let busy = false;
@@ -28,7 +27,7 @@ function initializeHistory(vscode, taskActions) {
   }
 
   function loadHistory() {
-    send({ type: 'loadHistory', demo: !demoChip.hidden });
+    send({ type: 'loadHistory' });
   }
 
   function show(index) {
