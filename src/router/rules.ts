@@ -1,5 +1,19 @@
 import { Route } from '../types';
 
+/** Agent ids that can serve as a coding destination for a route. */
+export const CODING_DESTINATIONS = ['codex', 'antigravity', 'copilot'] as const;
+export type CodingDestination = (typeof CODING_DESTINATIONS)[number];
+
+export function isCodingDestination(value: string): value is CodingDestination {
+  return (CODING_DESTINATIONS as readonly string[]).includes(value);
+}
+
+/** Rules-tier fallback: when both LLM tiers fail, use the KB's top candidate. */
+export function withKbFallback(route: Route, candidate: { agent_id: string } | undefined): Route {
+  if (!candidate || !isCodingDestination(candidate.agent_id)) return route;
+  return { ...route, recommended_destination: candidate.agent_id };
+}
+
 const danger = /\b(delete|drop|deploy|prod(?:uction)?|secrets?|credentials?|migrate)\b|\bforce[\s-]+push\b|\brm\s+-rf\b/i;
 const changes = /\b(implement|add|fix|refactor|build|change|update)\b/i;
 const lowRisk = /\b(docs?|readme|comments?|format|explain|summarize)\b/i;

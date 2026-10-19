@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 
 export const KEY_NAMES = ['GEMINI_API_KEY', 'OLLAMA_API_KEY', 'ELEVENLABS_API_KEY'] as const;
 export type KeyName = typeof KEY_NAMES[number];
@@ -36,6 +36,8 @@ export async function clearPersonalKey(secrets: vscode.SecretStorage, provider: 
 // F5 runs the extension from this repository.
 // Import only known keys into SecretStorage; never expose .env to task context.
 export async function importDevelopmentKeys(context: vscode.ExtensionContext): Promise<void> {
+  // Required lazily so KB scripts can import the router outside the extension host.
+  const vscode = require('vscode') as typeof import('vscode');
   if (context.extensionMode !== vscode.ExtensionMode.Development) return;
   try {
     const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(context.extensionUri, '.env'));
@@ -77,6 +79,7 @@ export async function setKey(secrets: vscode.SecretStorage, name: KeyName | type
 }
 
 export async function setKeys(secrets: vscode.SecretStorage): Promise<void> {
+  const vscode = require('vscode') as typeof import('vscode');
   let saved = 0;
   try {
     for (const name of KEY_NAMES) {

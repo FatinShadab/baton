@@ -1,18 +1,35 @@
 import type { Disposable, SecretStorage } from 'vscode';
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
+import type { ZodType, ZodTypeDef } from 'zod';
+import { getKey, preferredKey } from '../secrets';
+import { loadAvailability, loadKB } from '../kb/store';
+import { researchAgents } from '../kb/research';
+import type { Candidate } from '../kb/research';
+import type { KnowledgeBase } from '../kb/types';
+import type { Route } from '../types';
 import { RouteSchema, RouterResult } from '../types';
 import { routeGemma } from './gemma';
-import { routeOllama } from './ollama';
-import { classify } from './rules';
+import { callGemmaJsonWithKey } from './gemma-client';
+import { callOllamaJsonWithKey, routeOllama } from './ollama';
+import { classify, isCodingDestination, withKbFallback } from './rules';
+import type { CodingDestination } from './rules';
 import { RouterHttpError, RouterMissingKeyError, RouterTimeoutError } from './timeout';
+
+export type RouterKbContext = {
+  readonly extensionUri: { readonly fsPath: string };
+  readonly globalStorageUri: { readonly fsPath: string };
+};
 
 const cache = new Map<string, RouterResult>();
 const CACHE_LIMIT = 100;
 let keyStore: SecretStorage | undefined;
+let kbContext: RouterKbContext | undefined;
 let generation = 0;
 
-export function initializeRouter(secrets: SecretStorage): Disposable {
+export function initializeRouter(secrets: SecretStorage, kb?: RouterKbContext): Disposable {
   keyStore = secrets;
+  kbContext = kb;
   cache.clear();
   generation++;
   return secrets.onDidChange(({ key }) => {
@@ -23,43 +40,230 @@ export function initializeRouter(secrets: SecretStorage): Disposable {
   });
 }
 
+function describeCallError(error: unknown): string {
+  return error instanceof RouterTimeoutError ? 'timed out'
+    : error instanceof RouterHttpError ? `HTTP ${error.status}`
+    : error instanceof RouterMissingKeyError ? 'API key missing'
+    : error instanceof SyntaxError ? 'invalid JSON'
+    : 'connection failed';
+}
+
+/**
+ * Generic JSON call for non-routing work. Tries Gemma, then Ollama, with the
+ * same timeouts and fence-stripping as the router.
+ */
+export async function callJson<T>(
+  systemPrompt: string,
+  userPrompt: string,
+  schema: ZodType<T, ZodTypeDef, unknown>,
+): Promise<T> {
+  const secrets = keyStore;
+  if (!secrets) throw new Error('Baton router is not initialized.');
+  const failures: string[] = [];
+
+  try {
+    const apiKey = await preferredKey(secrets, 'gemma');
+    if (!apiKey) throw new RouterMissingKeyError();
+    const parsed = schema.safeParse(await callGemmaJsonWithKey(apiKey, systemPrompt, userPrompt));
+    if (parsed.success) return parsed.data;
+    failures.push('gemma: invalid JSON');
+  } catch (error) {
+    failures.push(`gemma: ${describeCallError(error)}`);
+  }
+
+  try {
+    const apiKey = await getKey(secrets, 'OLLAMA_API_KEY');
+    if (!apiKey) throw new RouterMissingKeyError();
+    const parsed = schema.safeParse(await callOllamaJsonWithKey(apiKey, systemPrompt, userPrompt));
+    if (parsed.success) return parsed.data;
+    failures.push('ollama: invalid JSON');
+  } catch (error) {
+    failures.push(`ollama: ${describeCallError(error)}`);
+  }
+
+  throw new Error(`Baton could not get valid JSON (${failures.join('; ')}).`);
+}
+
+const ModelChoiceSchema = z.object({
+  agent_id: z.string().min(1),
+  model: z.string().min(1).nullable(),
+  reasoning: z.enum(['low', 'medium', 'high', 'default']).nullable(),
+  reason: z.string().max(200),
+  claim_ids: z.array(z.string()).default([]),
+});
+type ModelChoice = z.infer<typeof ModelChoiceSchema>;
+
+const MODEL_SYSTEM_PROMPT = `You choose one coding-agent model candidate for a task.
+
+The candidate list in the user message is the ONLY source of truth. Never name an agent or model that is not in the list. Choose exactly one candidate.
+
+Return JSON only:
+{
+  "agent_id": string,
+  "model": string | null,
+  "reasoning": "low" | "medium" | "high" | "default" | null,
+  "reason": string of at most 200 characters,
+  "claim_ids": string[]
+}
+
+claim_ids must come from the chosen candidate.
+Reasoning guidance: prefer higher reasoning only for high/moderate-risk or multi-file tasks; low for docs and small edits. Use "default" when unsure.`;
+
+const MODEL_CHOICE_FALLBACK = 'KB top candidate (model choice failed validation)';
+const NO_MODEL_DATA = 'No model data yet';
+
+function normalizeModelName(value: string | null | undefined): string | null {
+  return value ? value.trim().toLowerCase() : null;
+}
+
+async function researchForRoute(task: string, route: Route): Promise<{ kb: KnowledgeBase; candidates: Candidate[] } | undefined> {
+  if (!kbContext) return undefined;
+  try {
+    const [kb, availability] = await Promise.all([loadKB(kbContext), loadAvailability(kbContext)]);
+    const candidates = await researchAgents({
+      task,
+      taskType: route.task_type,
+      riskTier: route.risk_tier,
+      topN: 5,
+    }, { kb, availability, globalStorageUri: kbContext.globalStorageUri });
+    return { kb, candidates };
+  } catch {
+    // KB failures never block routing.
+    return undefined;
+  }
+}
+
+async function chooseModel(
+  task: string,
+  route: Route,
+  candidates: Candidate[],
+): Promise<{ choice: ModelChoice; candidate: Candidate; destination: CodingDestination } | undefined> {
+  try {
+    const compact = candidates.map((candidate) => ({
+      agent_id: candidate.agent_id,
+      model: candidate.model,
+      score: candidate.score,
+      stale: candidate.stale,
+      why: candidate.why.slice(0, 3).map((line) => line.slice(0, 120)),
+      claim_ids: candidate.claim_ids,
+    }));
+    const userPrompt = JSON.stringify({
+      task,
+      task_type: route.task_type,
+      risk_tier: route.risk_tier,
+      candidates: compact,
+    });
+    const choice = await callJson(MODEL_SYSTEM_PROMPT, userPrompt, ModelChoiceSchema);
+    const chosen = candidates.find((candidate) => candidate.agent_id === choice.agent_id
+      && normalizeModelName(candidate.model) === normalizeModelName(choice.model));
+    if (!chosen || !isCodingDestination(choice.agent_id)) return undefined;
+    const knownClaims = new Set(chosen.claim_ids);
+    if (choice.claim_ids.some((id) => !knownClaims.has(id))) return undefined;
+    return { choice, candidate: chosen, destination: choice.agent_id };
+  } catch {
+    return undefined;
+  }
+}
+
 export async function routeTask(task: string, ctxSnippet: string, workspaceUri = ''): Promise<RouterResult> {
   // A changed sharing selection must not reuse a route based on excluded context.
   const cacheKey = createHash('sha256').update(JSON.stringify([task, ctxSnippet, workspaceUri])).digest('hex');
   const cached = cache.get(cacheKey);
   if (cached) return { ...cached, route: { ...cached.route } };
   const startedGeneration = generation;
-  let result: RouterResult | undefined;
+  let baseRoute: Route | undefined;
+  let tier: 'gemma' | 'ollama' | 'rules' = 'rules';
+  let notice: string | undefined;
   const failures: string[] = [];
+
   if (keyStore && task.trim()) {
-    for (const [tier, provider] of [['gemma', routeGemma], ['ollama', routeOllama]] as const) {
+    for (const [providerTier, provider] of [['gemma', routeGemma], ['ollama', routeOllama]] as const) {
       try {
         const value = await provider(keyStore, task, ctxSnippet);
         const parsed = RouteSchema.safeParse(value);
         if (parsed.success) {
-          result = { route: parsed.data, tier };
+          baseRoute = parsed.data;
+          tier = providerTier;
           break;
         }
-        failures.push(`${tier}: ${value === undefined ? 'empty response' : 'invalid route response'}`);
+        failures.push(`${providerTier}: ${value === undefined ? 'empty response' : 'invalid route response'}`);
       } catch (error) {
-        const reason = error instanceof RouterTimeoutError ? 'timed out'
-          : error instanceof RouterHttpError ? `HTTP ${error.status}`
-          : error instanceof RouterMissingKeyError ? 'API key missing'
-          : error instanceof SyntaxError ? 'invalid JSON'
-          : 'connection failed';
-        failures.push(`${tier}: ${reason}`);
+        failures.push(`${providerTier}: ${describeCallError(error)}`);
       }
     }
   }
-  if (result?.tier === 'ollama' && failures.length) {
-    result.notice = `Gemma unavailable (${failures[0]}). Routed via Ollama.`;
+
+  if (!baseRoute) {
+    baseRoute = classify(task);
+    tier = 'rules';
+    notice = `Using local rules (${failures.join('; ') || 'router unavailable'}).`;
+  } else if (tier === 'ollama' && failures.length) {
+    notice = `Gemma unavailable (${failures[0]}). Routed via Ollama.`;
   }
-  result ??= { route: RouteSchema.parse(classify(task)), tier: 'rules',
-    notice: `Using local rules (${failures.join('; ') || 'router unavailable'}).` };
+
+  let route: Route = {
+    ...baseRoute,
+    recommended_model: null,
+    model_reasoning: null,
+    kb_refs: [],
+    kb_stale: false,
+    kb_note: null,
+  };
+
+  // Research runs for every route; only coding destinations consume candidates.
+  const snapshot = task.trim() ? await researchForRoute(task, route) : undefined;
+  if (isCodingDestination(route.recommended_destination) && task.trim()) {
+    const codingCandidates = snapshot
+      ? snapshot.candidates.filter((candidate) => isCodingDestination(candidate.agent_id))
+      : [];
+
+    if (snapshot && codingCandidates.length > 0) {
+      const top = codingCandidates[0];
+      if (snapshot.kb.models.length === 0) {
+        route = {
+          ...withKbFallback(route, top),
+          recommended_model: top.model,
+          kb_refs: [...top.claim_ids],
+          kb_stale: top.stale,
+          kb_note: NO_MODEL_DATA,
+        };
+      } else if (tier === 'rules') {
+        route = {
+          ...withKbFallback(route, top),
+          recommended_model: top.model,
+          kb_refs: [...top.claim_ids],
+          kb_stale: top.stale,
+        };
+      } else {
+        const chosen = await chooseModel(task, route, codingCandidates);
+        if (chosen) {
+          route = {
+            ...route,
+            recommended_destination: chosen.destination,
+            recommended_model: chosen.candidate.model,
+            model_reasoning: chosen.choice.reasoning,
+            kb_refs: [...chosen.choice.claim_ids],
+            kb_stale: chosen.candidate.stale,
+            kb_note: chosen.choice.reason,
+          };
+        } else {
+          route = {
+            ...withKbFallback(route, top),
+            recommended_model: top.model,
+            kb_refs: [...top.claim_ids],
+            kb_stale: top.stale,
+            kb_note: MODEL_CHOICE_FALLBACK,
+          };
+        }
+      }
+    }
+  }
+
+  const result: RouterResult = { route, tier, notice };
   // A temporary provider failure must not pin this task to the rules tier.
-  if (result.tier !== 'rules' && startedGeneration === generation) {
+  if (tier !== 'rules' && startedGeneration === generation) {
     if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value!);
-    cache.set(cacheKey, { ...result, route: { ...result.route } });
+    cache.set(cacheKey, { ...result, route: { ...route, kb_refs: route.kb_refs ? [...route.kb_refs] : undefined } });
   }
   return result;
 }

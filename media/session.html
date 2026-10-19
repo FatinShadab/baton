@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}';">
   <link rel="stylesheet" href="{{styleUri}}">
-  <title>Session Manager</title>
+  <title>Task Manager</title>
 </head>
 <body>
   <header class="session-header">
@@ -17,28 +17,50 @@
       <span class="brand-title">Baton</span>
     </div>
     <div class="section-label">
-      <span class="section-arrow">▾</span> SESSION MANAGER
+      <span class="section-arrow">▾</span> TASK MANAGER
     </div>
   </header>
 
-  <div class="session-actions">
-    <button id="new-session-btn" type="button" class="btn-new-session">
-      <span class="plus-icon">+</span> New session
+  <!-- Project header badge when project is open -->
+  <div id="project-bar" class="project-bar" hidden>
+    <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+    </svg>
+    <span class="project-label">PROJECT:</span>
+    <span id="project-name" class="project-name"></span>
+  </div>
+
+  <!-- Prompt to Open or Create Project when no project is open -->
+  <div id="no-project-banner" class="no-project-banner" hidden>
+    <div class="no-project-icon">📂</div>
+    <h3 class="no-project-title">No Project Open</h3>
+    <p class="no-project-text">Tasks are organized under a project. Open or create a project folder in VS Code to get started.</p>
+    <button id="open-project-btn" type="button" class="btn-open-project">
+      <span class="btn-icon">📁</span> Open or Create Project
     </button>
   </div>
 
-  <div class="search-wrap">
-    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="11" cy="11" r="8"></circle>
-      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-    </svg>
-    <input id="session-search" type="search" placeholder="Search sessions..." autocomplete="off" spellcheck="false">
-  </div>
+  <!-- Main Tasks Area (active when a project is open) -->
+  <div id="tasks-container">
+    <div class="session-actions">
+      <button id="new-session-btn" type="button" class="btn-new-session">
+        <span class="plus-icon">+</span> New task
+      </button>
+    </div>
 
-  <div id="session-list" class="session-list" role="list">
-    <div id="empty-state" class="empty-state">
-      <p class="empty-msg">No sessions yet</p>
-      <p class="empty-hint">Start a new task or conversation to create your first session.</p>
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input id="session-search" type="search" placeholder="Search tasks..." autocomplete="off" spellcheck="false">
+    </div>
+
+    <div id="session-list" class="session-list" role="list">
+      <div id="empty-state" class="empty-state">
+        <p class="empty-msg">No tasks yet</p>
+        <p class="empty-hint">Start a new conversation to create your first task for this project.</p>
+      </div>
     </div>
   </div>
 

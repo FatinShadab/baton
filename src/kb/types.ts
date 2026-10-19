@@ -19,7 +19,7 @@ export const ClaimSchema = z.object({
 export type Claim = z.infer<typeof ClaimSchema>;
 
 export const AgentIntegrationSchema = z.object({
-  mode: z.enum(['cli-terminal', 'vscode-chat']),
+  mode: z.enum(['cli-terminal', 'vscode-chat', 'manual']),
   supportsModelFlag: z.union([z.boolean(), z.literal('unknown')]),
   supportsReasoningFlag: z.union([z.boolean(), z.literal('unknown')]),
 });
@@ -74,9 +74,17 @@ export const KnowledgeBaseSchema = z.object({
 });
 export type KnowledgeBase = z.infer<typeof KnowledgeBaseSchema>;
 
+export const AvailabilityKindSchema = z.enum(['model', 'alias', 'auto', 'mode']).default('model');
+export type AvailabilityKind = z.infer<typeof AvailabilityKindSchema>;
+
 export const AvailabilitySchema = z.object({
   agents: z.array(z.string().min(1)),
-  models: z.array(z.object({ agent_id: z.string().min(1), name: z.string().min(1) })),
+  models: z.array(z.object({
+    agent_id: z.string().min(1),
+    name: z.string().min(1),
+    /** Omitted entries are concrete models; aliases/modes only surface as a fallback. */
+    kind: AvailabilityKindSchema,
+  })),
 });
 export type Availability = z.infer<typeof AvailabilitySchema>;
 
@@ -87,6 +95,7 @@ export const KbSourcesSchema = z.object({
     agent_id: z.string().min(1),
     url: Url,
     note: z.string().optional(),
+    timeout_ms: z.number().int().positive().max(30000).default(10000),
   })),
 });
 export type KbSources = z.infer<typeof KbSourcesSchema>;
@@ -97,3 +106,15 @@ export const KbChangeSchema = z.object({
 });
 export const KbChangelogSchema = z.array(KbChangeSchema);
 export type KbChange = z.infer<typeof KbChangeSchema>;
+
+const StatsEntrySchema = z.object({
+  agent_id: z.string(),
+  model: z.string().nullable(),
+  taskType: z.string(),
+  success: z.number().nonnegative(),
+  total: z.number().nonnegative(),
+});
+export type StatsEntry = z.infer<typeof StatsEntrySchema>;
+
+export const StatsSchema = z.array(StatsEntrySchema);
+export type StatsRecord = z.infer<typeof StatsSchema>;

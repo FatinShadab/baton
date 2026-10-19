@@ -15,7 +15,9 @@
     "onView:baton.sessions",
     "onCommand:baton.openEditor",
     "onCommand:baton.newSession",
-    "onCommand:baton.copyMcpConfig"
+    "onCommand:baton.copyMcpConfig",
+    "onCommand:baton.kb.previewSource",
+    "onCommand:baton.kb.update"
   ],
   "contributes": {
     "commands": [
@@ -25,11 +27,11 @@
       },
       {
         "command": "baton.newSession",
-        "title": "Baton: New Session"
+        "title": "Baton: New Task"
       },
       {
         "command": "baton.focus",
-        "title": "Baton: Focus Session Manager"
+        "title": "Baton: Focus Task Manager"
       },
       {
         "command": "baton.setKeys",
@@ -46,6 +48,14 @@
       {
         "command": "baton.kb.openAvailability",
         "title": "Baton: Open Knowledge Base Availability"
+      },
+      {
+        "command": "baton.kb.previewSource",
+        "title": "Baton: Preview Knowledge Base Source"
+      },
+      {
+        "command": "baton.kb.update",
+        "title": "Baton: Update Knowledge"
       }
     ],
     "viewsContainers": {
@@ -68,7 +78,7 @@
         {
           "type": "webview",
           "id": "baton.sessions",
-          "name": "SESSION MANAGER"
+          "name": "TASK MANAGER"
         }
       ]
     }
@@ -90,6 +100,7 @@
     "@google/genai": "1.0.0",
     "@modelcontextprotocol/sdk": "1.32.1",
     "minisearch": "^7.2.0",
+    "node-html-parser": "^9.0.5",
     "zod": "^3.25.76"
   }
 }

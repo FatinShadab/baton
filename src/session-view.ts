@@ -27,14 +27,17 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
   public async refresh(): Promise<void> {
     if (!this.view) return;
     try {
-      const workspaceUri = this.currentWorkspaceUri();
+      const workspace = this.currentWorkspace();
       const allSessions = (await this.store.loadSessions()) ?? [];
-      const sessions = allSessions.filter((s) => !workspaceUri || !s.workspaceUri || s.workspaceUri === workspaceUri)
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      const sessions = workspace
+        ? allSessions.filter((s) => s.workspaceUri === workspace.uri)
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        : [];
       await this.view.webview.postMessage({
         type: 'sessionsList',
         sessions,
         activeSessionId: this.activeSessionId,
+        project: workspace ? { name: workspace.name, uri: workspace.uri } : undefined,
       });
     } catch {
       // Sidebar post failed, fall through safely
@@ -71,11 +74,17 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
       try {
         if (message.type === 'loadSessions') {
           await this.refresh();
+        } else if (message.type === 'openProject') {
+          await vscode.commands.executeCommand('vscode.openFolder');
         } else if (message.type === 'selectSession') {
           this.activeSessionId = message.sessionId;
           await this.onSelectSession(message.sessionId);
           await this.postActiveSession();
         } else if (message.type === 'newSession') {
+          if (!this.currentWorkspace()) {
+            void vscode.window.showWarningMessage('Please open or create a project first before creating tasks.');
+            return;
+          }
           await this.onNewSession();
         } else if (message.type === 'deleteSession') {
           await this.store.deleteSession(message.sessionId);
@@ -110,10 +119,10 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private currentWorkspaceUri(): string | undefined {
+  private currentWorkspace(): { uri: string; name: string } | undefined {
     const editor = vscode.window.activeTextEditor;
     const folder = (editor && vscode.workspace.getWorkspaceFolder(editor.document.uri))
       ?? vscode.workspace.workspaceFolders?.find((entry) => entry.uri.scheme === 'file');
-    return folder?.uri.toString();
+    return folder?.uri.scheme === 'file' ? { uri: folder.uri.toString(), name: folder.name } : undefined;
   }
 }

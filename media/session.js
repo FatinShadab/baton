@@ -4,9 +4,15 @@
   const emptyStateEl = document.getElementById('empty-state');
   const newSessionBtn = document.getElementById('new-session-btn');
   const searchInput = document.getElementById('session-search');
+  const projectBar = document.getElementById('project-bar');
+  const projectNameEl = document.getElementById('project-name');
+  const noProjectBanner = document.getElementById('no-project-banner');
+  const openProjectBtn = document.getElementById('open-project-btn');
+  const tasksContainer = document.getElementById('tasks-container');
 
   let currentSessions = [];
   let currentActiveId = undefined;
+  let currentProject = undefined;
 
   function formatTime(isoString) {
     if (!isoString) return '';
@@ -27,6 +33,20 @@
   }
 
   function renderSessions() {
+    if (!currentProject) {
+      if (noProjectBanner) noProjectBanner.hidden = false;
+      if (projectBar) projectBar.hidden = true;
+      if (tasksContainer) tasksContainer.hidden = true;
+      return;
+    }
+
+    if (noProjectBanner) noProjectBanner.hidden = true;
+    if (projectBar) {
+      projectBar.hidden = false;
+      if (projectNameEl) projectNameEl.textContent = currentProject.name;
+    }
+    if (tasksContainer) tasksContainer.hidden = false;
+
     const query = (searchInput.value || '').trim().toLowerCase();
     const filtered = currentSessions.filter((s) => {
       if (!query) return true;
@@ -53,11 +73,11 @@
 
       const title = document.createElement('span');
       title.className = 'session-card-title';
-      title.textContent = session.title || 'Untitled Session';
+      title.textContent = session.title || 'Untitled Task';
 
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'session-card-delete';
-      deleteBtn.title = 'Delete session';
+      deleteBtn.title = 'Delete task';
       deleteBtn.innerHTML = '&#128465;'; // trash can icon
       deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -75,11 +95,11 @@
 
       meta.append(time);
 
-      const taskCount = (session.taskIds && session.taskIds.length) || (session.turns && session.turns.length) || 0;
-      if (taskCount > 0) {
+      const turnCount = session.turns?.filter((t) => t.role === 'user')?.length || session.taskIds?.length || 0;
+      if (turnCount > 0) {
         const badge = document.createElement('span');
         badge.className = 'session-badge';
-        badge.textContent = `${taskCount} task${taskCount > 1 ? 's' : ''}`;
+        badge.textContent = `${turnCount} prompt${turnCount > 1 ? 's' : ''}`;
         meta.append(badge);
       }
 
@@ -93,11 +113,19 @@
     });
   }
 
-  newSessionBtn.addEventListener('click', () => {
+  newSessionBtn?.addEventListener('click', () => {
+    if (!currentProject) {
+      vscode.postMessage({ type: 'openProject' });
+      return;
+    }
     vscode.postMessage({ type: 'newSession' });
   });
 
-  searchInput.addEventListener('input', () => {
+  openProjectBtn?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'openProject' });
+  });
+
+  searchInput?.addEventListener('input', () => {
     renderSessions();
   });
 
@@ -107,6 +135,7 @@
 
     if (message.type === 'sessionsList') {
       currentSessions = message.sessions || [];
+      currentProject = message.project;
       if (message.activeSessionId !== undefined) {
         currentActiveId = message.activeSessionId;
       }

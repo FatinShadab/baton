@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { SessionRecord, SessionRecordSchema, TaskRecord, TaskRecordSchema } from './types';
+import { StatsRecordSchema, StatsRecord } from './types'; export const StatsSchema = z.array(StatsRecordSchema);
 
 const TasksSchema = z.array(TaskRecordSchema);
 const SessionsSchema = z.array(SessionRecordSchema);
@@ -141,5 +142,29 @@ export class JsonStore {
       await this.writeFile('sessions.json', SessionsSchema, filtered);
       return true;
     }).then((res) => res ?? false);
+  }
+
+  /** Load stats from global storage */
+  async loadStats(): Promise<StatsRecord[]> {
+    try {
+      const raw = await this.readFile('stats.json', StatsSchema, []);
+      return raw;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Save stats to global storage */
+  async saveStats(stats: StatsRecord[]): Promise<boolean> {
+    return this.write('stats.json', StatsSchema, stats);
+  }
+
+  /** Load availability info from global storage */
+  async loadAvailability(): Promise<{ globalStorageUri: { fsPath: string } }> {
+    const vscode = require('vscode') as typeof import('vscode');
+    // Use globalStorageUri from workspace if available, otherwise empty
+    const storageUri = (vscode.workspace as any).globalStorageUri;
+    const fsPath = storageUri?.fsPath || '';
+    return { globalStorageUri: { fsPath } };
   }
 }

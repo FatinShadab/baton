@@ -40,6 +40,58 @@
       "limits": [],
       "sources": [],
       "last_verified": null
+    },
+    {
+      "id": "claude_code",
+      "label": "Claude Code",
+      "integration": {
+        "mode": "manual",
+        "supportsModelFlag": "unknown",
+        "supportsReasoningFlag": "unknown"
+      },
+      "strengths": [],
+      "limits": [],
+      "sources": [],
+      "last_verified": null
+    },
+    {
+      "id": "cursor",
+      "label": "Cursor",
+      "integration": {
+        "mode": "manual",
+        "supportsModelFlag": "unknown",
+        "supportsReasoningFlag": "unknown"
+      },
+      "strengths": [],
+      "limits": [],
+      "sources": [],
+      "last_verified": null
+    },
+    {
+      "id": "windsurf",
+      "label": "Windsurf",
+      "integration": {
+        "mode": "manual",
+        "supportsModelFlag": "unknown",
+        "supportsReasoningFlag": "unknown"
+      },
+      "strengths": [],
+      "limits": [],
+      "sources": [],
+      "last_verified": null
+    },
+    {
+      "id": "opencode",
+      "label": "opencode",
+      "integration": {
+        "mode": "manual",
+        "supportsModelFlag": "unknown",
+        "supportsReasoningFlag": "unknown"
+      },
+      "strengths": [],
+      "limits": [],
+      "sources": [],
+      "last_verified": null
     }
   ],
   "models": []

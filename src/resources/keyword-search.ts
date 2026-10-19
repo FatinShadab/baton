@@ -15,17 +15,118 @@ function truncate(text: string, maxLen = 140): string {
 
 /**
  * Baton Research Tool: YouTube Search Scraper
- * Searches YouTube for video tutorials, walk-throughs, and technical explanations.
+ * Queries YouTube with the video filter applied (params: 'EgIQAQ%3D%3D') to return the top 3
+ * video tutorials and walkthroughs directly playable on YouTube.
  */
 export async function searchYouTubeKeywords(query: string): Promise<YouTubeVideoItem[]> {
   const cleaned = cleanQuery(query);
   if (!cleaned) return [];
-  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleaned)}`;
 
+  // 1. Primary: YouTube InnerTube API with video filter ('EgIQAQ%3D%3D' = Type: Video)
   try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20240101.00.00',
+            hl: 'en',
+            gl: 'US',
+          },
+        },
+        query: cleaned,
+        params: 'EgIQAQ%3D%3D', // YouTube filter for Type: Video
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (res.ok) {
+      const data = (await res.json()) as {
+        contents?: {
+          twoColumnSearchResultsRenderer?: {
+            primaryContents?: {
+              sectionListRenderer?: {
+                contents?: Array<{
+                  itemSectionRenderer?: {
+                    contents?: Array<{
+                      videoRenderer?: {
+                        videoId: string;
+                        title?: { runs?: Array<{ text: string }> };
+                        ownerText?: { runs?: Array<{ text: string }> };
+                        shortBylineText?: { runs?: Array<{ text: string }> };
+                        viewCountText?: { simpleText?: string };
+                        shortViewCountText?: { simpleText?: string };
+                        publishedTimeText?: { simpleText?: string };
+                        thumbnail?: { thumbnails?: Array<{ url: string }> };
+                      };
+                    }>;
+                  };
+                }>;
+              };
+            };
+          };
+        };
+      };
+
+      const sectionList =
+        data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+      if (Array.isArray(sectionList)) {
+        const found: YouTubeVideoItem[] = [];
+        for (const section of sectionList) {
+          const items = section?.itemSectionRenderer?.contents;
+          if (Array.isArray(items)) {
+            for (const item of items) {
+              const vr = item?.videoRenderer;
+              if (vr?.videoId) {
+                const id = vr.videoId;
+                const title = vr.title?.runs?.[0]?.text?.trim() || 'Video Tutorial';
+                const channel =
+                  vr.ownerText?.runs?.[0]?.text?.trim() ||
+                  vr.shortBylineText?.runs?.[0]?.text?.trim() ||
+                  'YouTube Creator';
+                const views =
+                  vr.viewCountText?.simpleText?.trim() ||
+                  (vr.shortViewCountText?.simpleText ? `${vr.shortViewCountText.simpleText} views` : undefined);
+                const published = vr.publishedTimeText?.simpleText?.trim();
+                const thumbnailUrl =
+                  vr.thumbnail?.thumbnails?.slice(-1)[0]?.url ||
+                  `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+
+                found.push({
+                  id,
+                  title,
+                  url: `https://www.youtube.com/watch?v=${id}`,
+                  thumbnailUrl,
+                  channel,
+                  views,
+                  published,
+                });
+                if (found.length >= 3) break;
+              }
+            }
+          }
+          if (found.length >= 3) break;
+        }
+        if (found.length > 0) return found;
+      }
+    }
+  } catch {
+    // Fall through to HTML scraper
+  }
+
+  // 2. Secondary fallback: Web search HTML with video filter parameter
+  try {
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleaned)}&sp=EgIQAQ%253D%253D`;
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
       },
       signal: AbortSignal.timeout(6000),
@@ -33,116 +134,141 @@ export async function searchYouTubeKeywords(query: string): Promise<YouTubeVideo
 
     if (response.ok) {
       const html = await response.text();
-      const match = html.match(/ytInitialData\s*=\s*({.+?});<\/script>/);
-      if (match) {
-        const data = JSON.parse(match[1]) as {
-          contents?: {
-            twoColumnSearchResultsRenderer?: {
-              primaryContents?: {
-                sectionListRenderer?: {
-                  contents?: Array<{
-                    itemSectionRenderer?: {
-                      contents?: Array<{
-                        videoRenderer?: {
-                          videoId: string;
-                          title?: { runs?: Array<{ text: string }> };
-                          ownerText?: { runs?: Array<{ text: string }> };
-                          viewCountText?: { simpleText?: string };
-                          publishedTimeText?: { simpleText?: string };
-                        };
-                      }>;
-                    };
-                  }>;
+      const idx = html.indexOf('ytInitialData');
+      if (idx >= 0) {
+        const start = html.indexOf('{', idx);
+        let depth = 0;
+        let end = -1;
+        for (let i = start; i < html.length && i < start + 1500000; i++) {
+          if (html[i] === '{') depth++;
+          else if (html[i] === '}') {
+            depth--;
+            if (depth === 0) {
+              end = i;
+              break;
+            }
+          }
+        }
+        if (end > start) {
+          const data = JSON.parse(html.slice(start, end + 1)) as {
+            contents?: {
+              twoColumnSearchResultsRenderer?: {
+                primaryContents?: {
+                  sectionListRenderer?: {
+                    contents?: Array<{
+                      itemSectionRenderer?: {
+                        contents?: Array<{
+                          videoRenderer?: {
+                            videoId: string;
+                            title?: { runs?: Array<{ text: string }> };
+                            ownerText?: { runs?: Array<{ text: string }> };
+                            viewCountText?: { simpleText?: string };
+                            publishedTimeText?: { simpleText?: string };
+                          };
+                        }>;
+                      };
+                    }>;
+                  };
                 };
               };
             };
           };
-        };
 
-        const sectionContents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents
-          ?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents;
+          const sectionList =
+            data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+          if (Array.isArray(sectionList)) {
+            const found: YouTubeVideoItem[] = [];
+            for (const section of sectionList) {
+              const items = section?.itemSectionRenderer?.contents;
+              if (Array.isArray(items)) {
+                for (const item of items) {
+                  const vr = item?.videoRenderer;
+                  if (vr?.videoId) {
+                    const id = vr.videoId;
+                    const title = vr.title?.runs?.[0]?.text?.trim() || 'Video Tutorial';
+                    const channel = vr.ownerText?.runs?.[0]?.text?.trim() || 'YouTube Creator';
+                    const views = vr.viewCountText?.simpleText?.trim();
+                    const published = vr.publishedTimeText?.simpleText?.trim();
 
-        if (Array.isArray(sectionContents)) {
-          const found: YouTubeVideoItem[] = [];
-          for (const item of sectionContents) {
-            if (!item.videoRenderer || !item.videoRenderer.videoId) continue;
-            const vr = item.videoRenderer;
-            const id = vr.videoId;
-            const title = vr.title?.runs?.[0]?.text?.trim() || 'Video Tutorial';
-            const channel = vr.ownerText?.runs?.[0]?.text?.trim() || 'YouTube Creator';
-            const views = vr.viewCountText?.simpleText?.trim();
-            const published = vr.publishedTimeText?.simpleText?.trim();
-
-            found.push({
-              id,
-              title,
-              url: `https://www.youtube.com/watch?v=${id}`,
-              thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-              channel,
-              views,
-              published,
-            });
-            if (found.length >= 3) break;
+                    found.push({
+                      id,
+                      title,
+                      url: `https://www.youtube.com/watch?v=${id}`,
+                      thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+                      channel,
+                      views,
+                      published,
+                    });
+                    if (found.length >= 3) break;
+                  }
+                }
+              }
+              if (found.length >= 3) break;
+            }
+            if (found.length > 0) return found;
           }
-          if (found.length > 0) return found;
         }
       }
     }
   } catch {
-    // Fall back to direct search card
+    // Both failed
   }
 
-  return [
-    {
-      id: 'search',
-      title: `Search YouTube: "${cleaned}"`,
-      url,
-      thumbnailUrl: 'https://www.youtube.com/img/desktop/yt_1200.png',
-      channel: 'YouTube Search',
-      views: 'Search results',
-    },
-  ];
+  return [];
 }
 
 /**
  * Baton Research Tool: Developer Articles & Blogs Search
- * Queries Dev.to and Hacker News APIs for technical engineering guides.
+ * Queries Dev.to production search index and Hacker News Algolia API for technical engineering guides.
  */
 export async function searchBlogsKeywords(query: string): Promise<BlogItem[]> {
   const cleaned = cleanQuery(query);
   if (!cleaned) return [];
   const results: BlogItem[] = [];
 
-  // 1. Dev.to API
+  // 1. Dev.to Algolia production search
   try {
-    const devToUrl = `https://dev.to/api/articles?q=${encodeURIComponent(cleaned)}&per_page=3`;
-    const res = await fetch(devToUrl, { signal: AbortSignal.timeout(5000) });
+    const devToAlgoliaUrl = 'https://PRSOBFP46H-dsn.algolia.net/1/indexes/Article_production/query';
+    const res = await fetch(devToAlgoliaUrl, {
+      method: 'POST',
+      headers: {
+        'x-algolia-application-id': 'PRSOBFP46H',
+        'x-algolia-api-key': '9aa7d31610cba78851c9b1f63776a9dd',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: cleaned, hitsPerPage: 3 }),
+      signal: AbortSignal.timeout(5000),
+    });
+
     if (res.ok) {
-      const items = (await res.json()) as Array<{
-        title: string;
-        url: string;
-        description?: string;
-        reading_time_minutes?: number;
-        public_reactions_count?: number;
-      }>;
-      for (const item of items) {
-        if (!item.title || !item.url) continue;
+      const data = (await res.json()) as {
+        hits?: Array<{
+          title: string;
+          path: string;
+          body?: string;
+          reading_time?: number;
+          positive_reactions_count?: number;
+        }>;
+      };
+
+      for (const hit of data.hits || []) {
+        if (!hit.title || !hit.path) continue;
         results.push({
-          title: item.title,
-          url: item.url,
+          title: hit.title,
+          url: `https://dev.to${hit.path}`,
           source: 'dev.to',
-          snippet: truncate(item.description || item.title),
-          readingTime: item.reading_time_minutes ? `${item.reading_time_minutes} min read` : undefined,
-          reactions: item.public_reactions_count ? `${item.public_reactions_count} reactions` : undefined,
+          snippet: truncate((hit.body || hit.title).replace(/<[^>]+>/g, ' ')),
+          readingTime: hit.reading_time ? `${hit.reading_time} min read` : undefined,
+          reactions: hit.positive_reactions_count ? `${hit.positive_reactions_count} reactions` : undefined,
         });
         if (results.length >= 3) break;
       }
     }
   } catch {
-    // Continue
+    // Continue to Hacker News fallback
   }
 
-  // 2. Hacker News Algolia API fallback
+  // 2. Hacker News Algolia API fallback / supplement
   if (results.length < 3) {
     try {
       const hnUrl = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(cleaned)}&tags=story&hitsPerPage=4`;
@@ -179,15 +305,6 @@ export async function searchBlogsKeywords(query: string): Promise<BlogItem[]> {
     } catch {
       // Ignore
     }
-  }
-
-  if (!results.length) {
-    results.push({
-      title: `Developer Guides for "${cleaned}"`,
-      url: `https://duckduckgo.com/?q=${encodeURIComponent(cleaned + ' developer guide tutorial')}`,
-      source: 'DuckDuckGo',
-      snippet: `Explore engineering articles and community guides for "${cleaned}".`,
-    });
   }
 
   return results.slice(0, 3);

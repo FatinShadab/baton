@@ -19,6 +19,15 @@ export function routePrompt(task: string, ctxSnippet: string): string {
   return JSON.stringify({ task, context: ctxSnippet });
 }
 
+/** Fence-stripping JSON object parser shared by non-routing callers. */
+export function parseJsonObject(text: string): unknown {
+  const clean = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start < 0 || end < start) throw new SyntaxError('JSON object missing.');
+  return JSON.parse(clean.slice(start, end + 1));
+}
+
 export function parseRouteJson(text: string): unknown {
   const clean = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const start = clean.indexOf('{');

@@ -9,6 +9,8 @@ import { CodexRunner } from './codex';
 import { copyMcpConfig, registerMcpProvider } from './mcp/config';
 import { McpSession } from './mcp/session';
 import { registerKbCommands } from './kb/store';
+import { registerSourceCommands } from './kb/fetch';
+import { maybeRunDailyUpdate, registerUpdateCommand } from './kb/update';
 import { SessionViewProvider } from './session-view';
 import { BatonEditorPanel } from './editor-panel';
 
@@ -39,6 +41,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
   };
 
   const newSession = async () => {
+    const folder = vscode.workspace.workspaceFolders?.find((entry) => entry.uri.scheme === 'file');
+    if (!folder) {
+      const choice = await vscode.window.showInformationMessage(
+        'Please open or create a project folder first before creating tasks.',
+        'Open Project',
+      );
+      if (choice === 'Open Project') {
+        await vscode.commands.executeCommand('vscode.openFolder');
+      }
+      return;
+    }
     const panel = await BatonEditorPanel.createOrShow(
       context.extensionUri,
       store,
@@ -74,12 +87,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
     codex,
     mcp,
     statusBar,
-    initializeRouter(context.secrets),
+    initializeRouter(context.secrets, context),
     vscode.commands.registerCommand('baton.openEditor', openEditor),
     vscode.commands.registerCommand('baton.newSession', newSession),
     vscode.commands.registerCommand('baton.setKeys', () => setKeys(context.secrets)),
     vscode.commands.registerCommand('baton.copyMcpConfig', () => copyMcpConfig(context)),
     ...registerKbCommands(context),
+    ...registerSourceCommands(context),
+    ...registerUpdateCommand(context),
     vscode.commands.registerCommand('baton.focus', async () => {
       try {
         await vscode.commands.executeCommand('baton.sessions.focus');
@@ -95,11 +110,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
     vscode.window.registerWebviewViewProvider('baton.panel', sessionProvider), // Fallback alias
   );
 
+  void maybeRunDailyUpdate(context);
+
   const editorListener = vscode.window.onDidChangeActiveTextEditor(() => {
     void sessionProvider.refresh();
   });
   const workspaceListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
     void sessionProvider.refresh();
+    void BatonEditorPanel.currentPanel?.refreshProjectState();
   });
 
   context.subscriptions.push(editorListener, workspaceListener);

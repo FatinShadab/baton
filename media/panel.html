@@ -16,7 +16,7 @@
         <path d="m13 9 3 3M5 5v4M3 7h4"/>
       </svg>
       <span class="brand-title">Baton</span>
-      <span id="session-chip" class="session-chip" title="Active session">New session</span>
+      <span id="session-chip" class="session-chip" title="Active task">New task</span>
     </div>
 
     <div class="tabs" role="tablist" aria-label="Baton navigation">
@@ -34,7 +34,7 @@
         </svg>
         <span class="header-btn-text">Resources</span>
       </button>
-      <button id="new-session-header-btn" type="button" class="header-btn header-btn-primary" title="Start a fresh session">+ New</button>
+      <button id="new-session-header-btn" type="button" class="header-btn header-btn-primary" title="Start a fresh task">+ New Task</button>
     </div>
   </header>
 
@@ -49,6 +49,16 @@
     <div class="chat-layout">
       <!-- Main Chat Workspace (Primary Column: Centered Stream, Watermark & Dock) -->
       <div class="chat-workspace">
+        <!-- No Project Open Banner -->
+        <div id="chat-no-project-banner" class="no-project-overlay" hidden>
+          <div class="no-project-icon">📂</div>
+          <h3>No Project Open</h3>
+          <p>Tasks must be under a project. Open or create a project folder in VS Code to get started.</p>
+          <button id="chat-open-project-btn" type="button" class="btn-open-project">
+            📁 Open or Create Project
+          </button>
+        </div>
+
         <!-- Center Background Watermark (Centered in Chat Workspace) -->
         <div class="chat-watermark" aria-hidden="true">
           <img src="{{watermarkUri}}" alt="" class="watermark-img" />
@@ -103,120 +113,6 @@
 
             <!-- Threaded Chat Turns Container -->
             <div id="chat-messages" class="chat-messages"></div>
-
-            <!-- Result Card Area (preserves existing IDs for routing updates) -->
-            <section id="result" role="status" aria-live="polite" aria-atomic="true">
-              <p id="routing-status" class="status-msg"></p>
-              <article id="route-card" class="route-card" hidden>
-                <div class="card-header">
-                  <div class="card-title-group">
-                    <h2 class="card-title">Route Result</h2>
-                    <div id="router-chip" class="router-chip" title="Routing fallback hierarchy: Gemma 4 (AI Studio) -> Ollama -> Rules">
-                      <span class="router-chip-label">Router:</span>
-                      <span class="chip-tier chip-gemma" data-tier="gemma">Gemma</span>
-                      <span class="chip-sep">|</span>
-                      <span class="chip-tier chip-ollama" data-tier="ollama">Ollama</span>
-                      <span class="chip-sep">|</span>
-                      <span class="chip-tier chip-rules" data-tier="rules">Rules</span>
-                    </div>
-                  </div>
-                  <span id="risk" class="risk"></span>
-                </div>
-                <p id="router-notice" class="router-notice" hidden></p>
-                <p id="router-tier" class="sr-only" aria-hidden="true"></p>
-
-                <!-- Stepper: Routed > Planned > Running > Done -->
-                <div class="stepper-wrap">
-                  <nav class="stepper" id="task-stepper" aria-label="Task progress">
-                    <div class="step" data-step="routed">
-                      <span class="step-num">1</span>
-                      <span class="step-name">Routed</span>
-                    </div>
-                    <span class="step-arrow" aria-hidden="true">›</span>
-                    <div class="step" data-step="planned">
-                      <span class="step-num">2</span>
-                      <span class="step-name">Planned</span>
-                    </div>
-                    <span class="step-arrow" aria-hidden="true">›</span>
-                    <div class="step" data-step="running">
-                      <span class="step-num">3</span>
-                      <span class="step-name">Running</span>
-                    </div>
-                    <span class="step-arrow" aria-hidden="true">›</span>
-                    <div class="step" data-step="done">
-                      <span class="step-num">4</span>
-                      <span class="step-name">Done</span>
-                    </div>
-                  </nav>
-                </div>
-
-                <!-- Policy Override Note -->
-                <div id="policy-override-note" class="policy-override-card" hidden>
-                  <div class="override-header">
-                    <span class="override-icon" aria-hidden="true">⚠️</span>
-                    <strong class="override-title">Policy overrode the model</strong>
-                  </div>
-                  <p id="policy-override-text" class="override-body">Risk raised to high by safety policy. Manual handling required; never auto-run.</p>
-                </div>
-
-                <dl class="route-grid">
-                  <div class="grid-item">
-                    <dt>Type</dt>
-                    <dd id="route-type"></dd>
-                  </div>
-                  <div class="grid-item">
-                    <dt>Destination</dt>
-                    <dd id="destination" class="dest-badge"></dd>
-                  </div>
-                  <div class="grid-item">
-                    <dt>Research</dt>
-                    <dd id="research"></dd>
-                  </div>
-                  <div class="grid-item">
-                    <dt>Policy Action</dt>
-                    <dd id="action" class="action-badge"></dd>
-                  </div>
-                </dl>
-
-                <div class="info-card reason-card">
-                  <span class="info-label">Reasoning</span>
-                  <p id="reason" class="info-content"></p>
-                </div>
-
-                <div class="info-card policy-card">
-                  <span class="info-label">Policy Gate</span>
-                  <p id="policy-why" class="info-content"></p>
-                </div>
-
-                <div id="plan-section" class="card-section" hidden>
-                  <div class="section-title">Implementation Plan</div>
-                  <label for="plan-text" class="field-label">Paste Plan</label>
-                  <textarea id="plan-text" rows="5" placeholder="Paste the implementation plan you received…"></textarea>
-                  <div class="plan-actions">
-                    <button id="use-clipboard" type="button" class="btn-secondary">📋 Paste clipboard</button>
-                    <button id="save-plan" type="button" class="btn-primary">💾 Save plan</button>
-                  </div>
-                  <p id="plan-status" class="status-msg" role="status" aria-live="polite"></p>
-                </div>
-
-                <div class="card-section">
-                  <div class="section-title">Run or Open</div>
-                  <div id="task-controls" class="task-controls"></div>
-                  <p id="task-status" class="status-msg" role="status" aria-live="polite"></p>
-                  <p id="task-outcome" class="outcome-msg"></p>
-                </div>
-              </article>
-            </section>
-
-            <!-- Collapsible Context Drawer (Inside Chat Stream) -->
-            <details id="context-preview" class="context-card" hidden>
-              <summary>What will be shared</summary>
-              <p class="context-intro">The task above and the selected context below will be sent when you route.</p>
-              <div id="context-sources" class="context-sources-list"></div>
-              <p id="context-size" class="context-size-text"></p>
-              <pre id="context-text" class="context-code"></pre>
-              <button id="refresh-context" type="button" class="btn-secondary">Refresh context</button>
-            </details>
           </div>
         </div>
 

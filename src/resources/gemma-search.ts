@@ -6,17 +6,20 @@ import { GemmaResearchPlan, ResearchToolCall } from './types';
 const GEMMA_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent';
 
 const RESEARCH_AGENT_SYSTEM_INSTRUCTION = `You are Baton's research intelligence agent.
-Given a developer's coding task and context, identify the core technical subjects and initiate 3 precise tool queries for Baton's research scrapers:
-1. "search_youtube": Targeted keywords for video tutorials, implementation walkthroughs, and system overviews.
-2. "search_blogs": Targeted keywords for engineering blogs (Dev.to / Hacker News) and developer documentation.
-3. "search_arxiv": Concise academic, algorithmic, or model-architecture keywords for arXiv research preprints.
+Given a developer's coding task and context, identify the core technical subjects and initiate 3 concise tool queries for Baton's live search tools:
+1. "search_youtube": Keywords for video tutorials and walkthroughs (e.g. "genetic algorithm python tutorial", "react server actions demo").
+2. "search_blogs": Keywords for developer articles on Dev.to and Hacker News (e.g. "genetic algorithm python implementation", "nextjs server actions guide").
+3. "search_arxiv": Academic, algorithmic, or theoretical keywords for arXiv preprints (e.g. "genetic algorithm optimization", "transformer attention").
 
-Respond with JSON ONLY in this exact structure:
+Rules:
+- Keep each query focused and concise (3-6 technical words).
+- Avoid generic filler words or conversational phrases.
+- Respond with JSON ONLY in this exact structure:
 {
   "tool_calls": [
-    { "tool": "search_youtube", "query": "optimal youtube query" },
-    { "tool": "search_blogs", "query": "optimal technical blog query" },
-    { "tool": "search_arxiv", "query": "optimal academic keywords" }
+    { "tool": "search_youtube", "query": "..." },
+    { "tool": "search_blogs", "query": "..." },
+    { "tool": "search_arxiv", "query": "..." }
   ]
 }
 Return JSON only. Do not wrap in markdown fences or add explanatory text.`;

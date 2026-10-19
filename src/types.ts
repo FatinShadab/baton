@@ -146,8 +146,17 @@ export const SessionRecordSchema = z.object({
   workspaceUri: z.string().optional(),
   taskIds: z.array(z.string()).optional(),
   turns: z.array(SessionTurnSchema).optional(),
+});export type SessionRecord = z.infer<typeof SessionRecordSchema>;
+
+/** Stats record for tracking research agent outcomes */
+export const StatsRecordSchema = z.object({
+  agent_id: z.string().min(1),
+  model: z.string().nullable(),
+  taskType: z.string().min(1),
+  success: z.number().nonnegative(),
+  total: z.number().nonnegative(),
 });
-export type SessionRecord = z.infer<typeof SessionRecordSchema>;
+export type StatsRecord = z.infer<typeof StatsRecordSchema>;
 
 export type SessionViewMessage =
   | { type: 'loadSessions' }

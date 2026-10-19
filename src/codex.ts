@@ -17,6 +17,16 @@ export function buildCodexPrompt(task: TaskRecord): string {
   ].join('\n');
 }
 
+/** Agent integration capabilities determined by running `codex --help`.
+ * Since Codex CLI is not installed in this environment, defaults to false.
+ * To update: run `codex --help` and check for --model and --reasoning flags.
+ * Quote the relevant help lines when updating.
+ */
+export const CodexCapabilities = {
+  supportsModelFlag: false,
+  supportsReasoningFlag: false,
+};
+
 function requireRunnable(task: TaskRecord): 'RUN' | 'CONFIRM' {
   const action = decide(task.route, [task.text, task.plan ?? ''].join('\n')).action;
   if (!['RUN', 'CONFIRM'].includes(task.decision) || !['RUN', 'CONFIRM'].includes(action)
@@ -170,6 +180,32 @@ export class CodexRunner implements vscode.Disposable {
       ? "$ErrorActionPreference = 'Stop'; npm.cmd test; exit $LASTEXITCODE" : 'npm test';
     await this.terminals.open('Baton: Tests', workspace, command);
     return 'Running npm test. Review the result before choosing Mark done.';
+  }
+
+  /**
+   * Build a Codex CLI command with optional model and reasoning flags.
+   * Only passes flags if the capability is supported.
+   * @param opts - Optional model and reasoning flags
+   */
+  buildCommand(opts?: { model?: string; reasoning?: 'low' | 'medium' | 'high' | 'default' }): string {
+    const { model, reasoning } = opts || {};
+    let command = '';
+
+    // Add model flag if supported and provided
+    if (model && CodexCapabilities.supportsModelFlag) {
+      command += ` --model ${model}`;
+    } else if (model && !CodexCapabilities.supportsModelFlag) {
+      vscode.window.showInformationMessage(`Select model ${model} manually in Codex. Model auto-set is not supported.`);
+    }
+
+    // Add reasoning flag if supported and provided
+    if (reasoning && CodexCapabilities.supportsReasoningFlag) {
+      command += ` --reasoning ${reasoning}`;
+    } else if (reasoning && !CodexCapabilities.supportsReasoningFlag) {
+      vscode.window.showInformationMessage(`Select reasoning ${reasoning} manually in Codex. Reasoning auto-set is not supported.`);
+    }
+
+    return command;
   }
 
   dispose(): void { this.terminals.dispose(); }

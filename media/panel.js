@@ -6,43 +6,29 @@
 
   const form = document.getElementById('task-form');
   const task = document.getElementById('task');
-  const card = document.getElementById('route-card');
-  const submit = form.querySelector('button[type="submit"]');
-  const status = document.getElementById('routing-status');
-  const preview = document.getElementById('context-preview');
-  const sourceList = document.getElementById('context-sources');
-  const refresh = document.getElementById('refresh-context');
-  const planSection = document.getElementById('plan-section');
-  const planText = document.getElementById('plan-text');
-  const savePlanBtn = document.getElementById('save-plan');
-  const useClipboardBtn = document.getElementById('use-clipboard');
-  const planStatus = document.getElementById('plan-status');
-  const handoffFallback = document.getElementById('handoff-fallback');
-  const openHandoffExternal = document.getElementById('open-handoff-external');
+  const submit = form?.querySelector('button[type="submit"]');
   const micBtn = document.getElementById('mic-btn');
   const mcpBtn = document.getElementById('mcp-btn');
   const mcpConnection = document.getElementById('mcp-connection');
   const mcpEndpoint = document.getElementById('mcp-endpoint-value');
   const mcpCopyConfig = document.getElementById('mcp-copy-config');
-  const controls = document.getElementById('task-controls');
-  const taskStatus = document.getElementById('task-status');
-  const taskOutcome = document.getElementById('task-outcome');
-  const overrideCard = document.getElementById('policy-override-note');
-  const overrideText = document.getElementById('policy-override-text');
+  const handoffFallback = document.getElementById('handoff-fallback');
+  const openHandoffExternal = document.getElementById('open-handoff-external');
   const toastContainer = document.getElementById('toast-container');
   const settingsStatus = document.getElementById('settings-status');
 
   const newSessionHeaderBtn = document.getElementById('new-session-header-btn');
   const tipCloseBtn = document.getElementById('tip-close-btn');
   const autoModeCard = document.getElementById('auto-mode-card');
-  const toggleContextBtn = document.getElementById('toggle-context-btn');
   const sessionChip = document.getElementById('session-chip');
   const heroState = document.getElementById('hero-state');
   const chatMessages = document.getElementById('chat-messages');
-  const dockRouterLabel = document.getElementById('dock-router-label');
   const toggleResearchBtn = document.getElementById('toggle-research-btn');
   const closeResearchBtn = document.getElementById('close-research-btn');
   const researchSidebar = document.getElementById('research-sidebar');
+
+  const chatNoProjectBanner = document.getElementById('chat-no-project-banner');
+  const chatOpenProjectBtn = document.getElementById('chat-open-project-btn');
 
   function setSidebarCollapsed(collapsed) {
     if (!researchSidebar) return;
@@ -63,25 +49,29 @@
   });
 
   let requestId = 0;
-  let ready = false;
-  let parts = [];
-  let limit = 6000;
-  let currentTaskId = '';
-  let pendingAutoRoute = false;
+  let hasProject = true;
+  let activePlanTextarea = null;
   const selected = new Set();
   const tiers = { gemma: 'via Gemma (AI Studio)', ollama: 'via Ollama', rules: 'via rules' };
 
   const SEND_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>';
   const SPINNER_ICON_SVG = '<svg class="dock-btn-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M12 3a9 9 0 0 1 9 9"></path></svg>';
+  const BATON_LOGO_SVG = '<svg class="assistant-turn-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 16 10-10a2.12 2.12 0 0 1 3 3L9 19a2.12 2.12 0 0 1-3-3Z"/><path d="m13 9 3 3M5 5v4M3 7h4"/></svg>';
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&')
+      .replace(/</g, '<')
+      .replace(/>/g, '>')
+      .replace(/\"/g, '"')
+      .replace(/'/g, '&#039;');
+  }
 
   function setSubmitButtonState(state = 'route', busy = false) {
     if (!submit) return;
     submit.innerHTML = busy ? SPINNER_ICON_SVG : SEND_ICON_SVG;
-    const isRoute = state === 'route';
-    let tooltip = isRoute ? 'Route task (Enter)' : 'Prepare context (Enter)';
-    if (busy) {
-      tooltip = isRoute ? 'Routing task…' : 'Preparing context…';
-    }
+    const tooltip = busy ? 'Routing task…' : 'Route task (Enter)';
     submit.setAttribute('data-tooltip', tooltip);
     submit.setAttribute('aria-label', tooltip);
     submit.removeAttribute('title');
@@ -89,21 +79,27 @@
 
   setSubmitButtonState('route', false);
 
-  task.value = vscode.getState()?.task ?? '';
+  if (task) {
+    task.value = vscode.getState()?.task ?? '';
 
-  function autoResize() {
-    task.style.height = 'auto';
-    task.style.height = `${Math.min(Math.max(task.scrollHeight, 38), 160)}px`;
-  }
-  task.addEventListener('input', autoResize);
-  autoResize();
-
-  task.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      form.dispatchEvent(new Event('submit', { cancelable: true }));
+    function autoResize() {
+      task.style.height = 'auto';
+      task.style.height = `${Math.min(Math.max(task.scrollHeight, 38), 160)}px`;
     }
-  });
+
+    task.addEventListener('input', () => {
+      autoResize();
+      vscode.setState({ task: task.value });
+    });
+    autoResize();
+
+    task.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form?.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    });
+  }
 
   if (tipCloseBtn && autoModeCard) {
     tipCloseBtn.addEventListener('click', () => {
@@ -113,46 +109,46 @@
 
   document.querySelectorAll('.pill-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (!task) return;
       task.value = btn.dataset.prompt || '';
-      autoResize();
+      task.style.height = 'auto';
+      task.style.height = `${Math.min(Math.max(task.scrollHeight, 38), 160)}px`;
       task.focus();
     });
   });
 
   if (newSessionHeaderBtn) {
     newSessionHeaderBtn.addEventListener('click', () => {
+      if (!hasProject) {
+        showToast('Please open or create a project first before creating tasks.', 'warning');
+        return;
+      }
       vscode.postMessage({ type: 'newSession' });
     });
   }
 
-  if (toggleContextBtn) {
-    toggleContextBtn.addEventListener('click', () => {
-      if (preview.hidden) {
-        if (!ready) {
-          prepareContext();
-        } else {
-          preview.hidden = false;
-          preview.open = true;
-        }
-      } else {
-        preview.hidden = true;
-      }
+  if (chatOpenProjectBtn) {
+    chatOpenProjectBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'openProject' });
     });
   }
 
-  mcpBtn.addEventListener('click', () => {
+  mcpBtn?.addEventListener('click', () => {
     mcpBtn.disabled = true;
     mcpBtn.textContent = 'Working…';
     vscode.postMessage({ type: 'mcpToggle' });
   });
+
   if (mcpCopyConfig) {
     mcpCopyConfig.addEventListener('click', () => vscode.postMessage({ type: 'mcpCopyConfig' }));
   }
-  openHandoffExternal.addEventListener('click', () => {
+
+  openHandoffExternal?.addEventListener('click', () => {
     if (openHandoffExternal.dataset.target) {
       vscode.postMessage({ type: 'openExternalHandoff', target: openHandoffExternal.dataset.target });
     }
   });
+
   vscode.postMessage({ type: 'mcpStatusRequest' });
 
   // ---------------------------------------------------------------------------
@@ -203,34 +199,32 @@
     }
   }
 
-  // Expose globally for history.js and helper modules
   window.showBatonToast = showToast;
 
   document.querySelectorAll('.personal-key-form').forEach((keyForm) => {
     keyForm.addEventListener('submit', (event) => {
       event.preventDefault();
       const input = keyForm.querySelector('input');
-      const value = input.value.trim();
+      const value = input?.value.trim();
       if (!value) return;
       vscode.postMessage({ type: 'savePersonalKey', provider: keyForm.dataset.provider, value });
-      input.value = '';
-      settingsStatus.textContent = 'Saving key…';
+      if (input) input.value = '';
+      if (settingsStatus) settingsStatus.textContent = 'Saving key…';
     });
   });
+
   document.querySelectorAll('.remove-key').forEach((button) => {
     button.addEventListener('click', () => {
       vscode.postMessage({ type: 'clearPersonalKey', provider: button.dataset.provider });
-      settingsStatus.textContent = 'Removing key…';
+      if (settingsStatus) settingsStatus.textContent = 'Removing key…';
     });
   });
 
   // ---------------------------------------------------------------------------
-  // Status Stepper: Routed > Planned > Running > Done
+  // Turn Stepper Helper
   // ---------------------------------------------------------------------------
-  function updateStepper(rawStatus, hasPlan = false) {
-    const stepper = document.getElementById('task-stepper');
-    if (!stepper) return;
-
+  function updateTurnStepper(stepperEl, rawStatus, hasPlan = false) {
+    if (!stepperEl) return;
     let stage = rawStatus || 'routed';
     if (stage === 'routed' && hasPlan) {
       stage = 'planned';
@@ -239,7 +233,7 @@
     const steps = ['routed', 'planned', 'running', 'done'];
     const currentIndex = steps.indexOf(stage);
 
-    stepper.querySelectorAll('.step').forEach((el) => {
+    stepperEl.querySelectorAll('.step').forEach((el) => {
       const stepName = el.dataset.step;
       const stepIndex = steps.indexOf(stepName);
       const numEl = el.querySelector('.step-num');
@@ -269,73 +263,385 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Router Chip: Gemma | Ollama | Rules
+  // KB & Recommendation Handlers
   // ---------------------------------------------------------------------------
-  function updateRouterChip(activeTier) {
-    const chip = document.getElementById('router-chip');
-    if (!chip) return;
-    chip.querySelectorAll('.chip-tier').forEach((el) => {
-      if (el.dataset.tier === activeTier) {
-        el.classList.add('active');
-        el.setAttribute('title', `Active router: ${el.textContent}`);
-      } else {
-        el.classList.remove('active');
-        el.removeAttribute('title');
-      }
-    });
+  function populateWhySection(route) {
+    const whyTextEl = document.getElementById('why-text');
+    const whySourcesEl = document.getElementById('why-sources');
+    if (!whyTextEl || !whySourcesEl) return;
+
+    // Populate claim texts with source links
+    let whyText = '';
+    let whySources = '';
+
+    if (route.kb_refs && route.kb_refs.length > 0) {
+      whyText = 'The following knowledge base claims support this recommendation:\n\n';
+      route.kb_refs.forEach((ref, i) => {
+        const refNum = i + 1;
+        whyText += `${refNum}. ${escapeHtml(ref)}\n\n`;
+      });
+    } else {
+      whyText = 'No specific knowledge base claims found for this recommendation.';
+    }
+
+    whyTextEl.textContent = whyText;
+
+    // Add source links if available
+    if (route.kb_refs && route.kb_refs.length > 0) {
+      whySourcesEl.innerHTML = '';
+      route.kb_refs.forEach((ref, i) => {
+        const refNum = i + 1;
+        const link = document.createElement('a');
+        link.href = ref;
+        link.textContent = `Source ${refNum}`;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        whySourcesEl.appendChild(link);
+        whySourcesEl.appendChild(document.createTextNode('\n '));
+      });
+    }
   }
 
-  // ---------------------------------------------------------------------------
-  // Task Input & Preview
-  // ---------------------------------------------------------------------------
-  task.addEventListener('input', () => {
-    handoffFallback.hidden = true;
-    openHandoffExternal.dataset.target = '';
-    vscode.setState({ task: task.value });
-    card.hidden = true;
-    if (overrideCard) overrideCard.hidden = true;
-    requestId++;
-    ready = false;
-    preview.hidden = true;
-    submit.disabled = false;
-    refresh.disabled = false;
-    setSubmitButtonState('prepare', false);
-    status.textContent = '';
-    currentTaskId = '';
-    controls.replaceChildren();
-    taskStatus.textContent = '';
-    taskOutcome.textContent = '';
-    planSection.hidden = true;
-    planText.value = '';
-    planStatus.textContent = '';
-    pendingAutoRoute = false;
+  function handleRefreshKB() {
+    showToast('Refreshing knowledge base…', 'info', 3000);
+    vscode.postMessage({ type: 'baton.kb.update' });
+  }
+
+  function handleOpenSources() {
+    vscode.postMessage({ type: 'baton.kb.openSources' });
+  }
+
+  // Add event listeners for the new buttons
+  document.addEventListener('DOMContentLoaded', () => {
+    const refreshBtn = document.querySelector('.refresh-kb');
+    const openSourcesBtn = document.querySelector('.open-sources');
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', handleRefreshKB);
+    }
+
+    if (openSourcesBtn) {
+      openSourcesBtn.addEventListener('click', handleOpenSources);
+    }
   });
 
-  function updatePreview() {
-    const text = parts.filter((part) => selected.has(part.source)).map((part) => part.text).join('\n\n');
-    document.getElementById('context-text').textContent = text.slice(0, limit);
-    document.getElementById('context-size').textContent =
-      `${Math.min(text.length, limit)} context characters will be shared` +
-      (text.length > limit ? ` (trimmed from ${text.length}).` : '.');
+  // ---------------------------------------------------------------------------
+  // Chat Turn Creation & Rendering
+  // ---------------------------------------------------------------------------
+  function appendUserMessage(text, isoTime) {
+    if (!chatMessages) return null;
+    const userTurn = document.createElement('div');
+    userTurn.className = 'user-message-turn';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'user-message-bubble';
+    bubble.textContent = text;
+
+    const meta = document.createElement('div');
+    meta.className = 'user-turn-meta';
+    const date = isoTime ? new Date(isoTime) : new Date();
+    meta.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    userTurn.append(bubble, meta);
+    chatMessages.appendChild(userTurn);
+    userTurn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    return userTurn;
   }
 
-  function prepareContext() {
-    if (!task.value.trim()) {
-      showToast('Please enter a coding task before routing.', 'warning', 3000);
-      return;
+  function appendAssistantLoadingTurn(reqId, promptText) {
+    if (!chatMessages) return null;
+    const assistantTurn = document.createElement('div');
+    assistantTurn.className = 'assistant-turn';
+    assistantTurn.dataset.requestId = String(reqId);
+
+    const header = document.createElement('div');
+    header.className = 'assistant-turn-header';
+    header.innerHTML = `${BATON_LOGO_SVG}<span class="assistant-turn-name">Baton Router</span>`;
+
+    const loadingCard = document.createElement('div');
+    loadingCard.className = 'assistant-loading-card';
+    loadingCard.innerHTML = '<span class="spinner"></span> Routing task via Gemma…';
+
+    assistantTurn.append(header, loadingCard);
+    chatMessages.appendChild(assistantTurn);
+    assistantTurn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    return assistantTurn;
+  }
+
+  function renderAssistantTurn(turnEl, data) {
+    turnEl.replaceChildren();
+    const taskId = data.taskId || '';
+    turnEl.dataset.taskId = taskId;
+
+    const route = data.route || {};
+    const action = data.decision?.action || data.decision || 'MANUAL_ONLY';
+    const why = data.decision?.why || data.why || '';
+    const tier = data.tier || data.routerTier || 'gemma';
+    const riskTier = route.risk_tier || 'moderate';
+
+    // Compute whether the KB has docs-verified claims
+    const hasDocsOrigin = route.kb_refs && route.kb_refs.some((ref) => ref && ref.includes('docs'));
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'assistant-turn-header';
+    header.innerHTML = `
+      ${BATON_LOGO_SVG}
+      <span class="assistant-turn-name">Baton Router</span>
+      <div class="router-chip" title="Routing fallback hierarchy: Gemma 4 (AI Studio) -> Ollama -> Rules">
+        <span class="router-chip-label">Router:</span>
+        <span class="chip-tier chip-gemma ${tier === 'gemma' ? 'active' : ''}">Gemma</span>
+        <span class="chip-sep">|</span>
+        <span class="chip-tier chip-ollama ${tier === 'ollama' ? 'active' : ''}">Ollama</span>
+        <span class="chip-sep">|</span>
+        <span class="chip-tier chip-rules ${tier === 'rules' ? 'active' : ''}">Rules</span>
+      </div>
+      <span class="risk risk-${riskTier}">${riskTier} risk</span>
+      <span class="assistant-turn-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+    `;
+
+    // Route Card
+    const card = document.createElement('article');
+    card.className = 'route-card';
+
+    // Stepper
+    const stepperWrap = document.createElement('div');
+    stepperWrap.className = 'stepper-wrap';
+    stepperWrap.innerHTML = `
+      <nav class="stepper" aria-label="Task progress">
+        <div class="step" data-step="routed">
+          <span class="step-num">1</span>
+          <span class="step-name">Routed</span>
+        </div>
+        <span class="step-arrow" aria-hidden="true">›</span>
+        <div class="step" data-step="planned">
+          <span class="step-num">2</span>
+          <span class="step-name">Planned</span>
+        </div>
+        <span class="step-arrow" aria-hidden="true">›</span>
+        <div class="step" data-step="running">
+          <span class="step-num">3</span>
+          <span class="step-name">Running</span>
+        </div>
+        <span class="step-arrow" aria-hidden="true">›</span>
+        <div class="step" data-step="done">
+          <span class="step-num">4</span>
+          <span class="step-name">Done</span>
+        </div>
+      </nav>
+    `;
+    updateTurnStepper(stepperWrap.querySelector('.stepper'), data.status || (action === 'BLOCK' ? 'blocked' : 'routed'), Boolean(data.plan));
+    card.appendChild(stepperWrap);
+
+    // Policy Override Card (if elevated to high)
+    const isOverride = Boolean(data.decision?.overrides)
+      || Boolean(data.overrides)
+      || /danger\s+keyword\s+raised\s+risk/i.test(why)
+      || /raised\s+risk/i.test(why);
+
+    if (isOverride) {
+      const overrideCard = document.createElement('div');
+      overrideCard.className = 'policy-override-card';
+      overrideCard.innerHTML = `
+        <div class="override-header">
+          <span class="override-icon" aria-hidden="true">⚠️</span>
+          <strong class="override-title">Policy overrode the model</strong>
+        </div>
+        <p class="override-body">${escapeHtml(why || 'Risk elevated to high by safety policy. Manual handling required; never auto-run.')}</p>
+      `;
+      card.appendChild(overrideCard);
     }
-    ready = false;
-    preview.hidden = true;
-    submit.disabled = true;
-    refresh.disabled = true;
-    card.hidden = true;
-    if (overrideCard) overrideCard.hidden = true;
-    setSubmitButtonState('prepare', true);
-    status.innerHTML = '<span class="spinner"></span> Preparing local context…';
-    vscode.postMessage({ type: 'previewContext', text: task.value, requestId: ++requestId });
-  }
 
-  refresh.addEventListener('click', prepareContext);
+    // Route Details Grid
+    const grid = document.createElement('dl');
+    grid.className = 'route-grid';
+    grid.innerHTML = `
+      <div class="grid-item">
+        <dt>Type</dt>
+        <dd>${escapeHtml(route.task_type || '')}</dd>
+      </div>
+      <div class="grid-item">
+        <dt>Destination</dt>
+        <dd class="dest-badge">${escapeHtml(route.recommended_destination || '')}</dd>
+      </div>
+      <div class="grid-item">
+        <dt>Research</dt>
+        <dd>${route.research_needed ? 'Yes' : 'No'}</dd>
+      </div>
+      <div class="grid-item">
+        <dt>Policy Action</dt>
+        <dd class="action-badge">${escapeHtml(action)}</dd>
+      </div>
+    `;
+    card.appendChild(grid);
+
+    // Recommended Card
+    const recommendedCard = document.createElement('div');
+    recommendedCard.className = 'info-card recommended-card';
+    recommendedCard.innerHTML = `
+      <span class="info-label">Recommended</span>
+      <div class="recommended-info">
+        <div class="recommended-agent" title="Agent">${escapeHtml(route.recommended_destination || '')}</div>
+        ${route.recommended_model !== null ? `<div class="recommended-model" title="Model">${escapeHtml(route.recommended_model)}</div>` : ''}
+        ${route.model_reasoning !== null ? `<div class="reasoning-badge" title="Reasoning Level">${escapeHtml(route.model_reasoning)}</div>` : ''}
+        <div class="recommended-reason" title="One-line Reason">${escapeHtml(route.reason || '')}</div>
+      </div>
+      <div class="recommended-badges">
+        ${route.kb_stale ? '<span class="badge badge-stale">Stale</span>' : ''}
+        ${hasDocsOrigin ? '<span class="badge badge-docs-verified">Docs-verified</span>' : ''}
+        ${!hasDocsOrigin && !route.kb_stale ? '<span class="badge badge-unverified">Unverified</span>' : ''}
+      </div>
+    `;
+    card.appendChild(recommendedCard);
+
+    // Recommended Card
+    const recommendedCard = document.createElement('div');
+    recommendedCard.className = 'info-card recommended-card';
+    recommendedCard.innerHTML = `
+      <span class="info-label">Recommended</span>
+      <div class="recommended-info">
+        <div class="recommended-agent" title="Agent">${escapeHtml(route.recommended_destination || '')}</div>
+        ${route.recommended_model !== null ? `<div class="recommended-model" title="Model">${escapeHtml(route.recommended_model)}</div>` : ''}
+        ${route.model_reasoning !== null ? `<div class="reasoning-badge" title="Reasoning Level">${escapeHtml(route.model_reasoning)}</div>` : ''}
+        <div class="recommended-reason" title="One-line Reason">${escapeHtml(route.reason || '')}</div>
+      </div>
+      <div class="recommended-badges">
+        ${route.kb_stale ? '<span class="badge badge-stale">Stale</span>' : ''}
+        ${hasDocsOrigin ? '<span class="badge badge-docs-verified">Docs-verified</span>' : ''}
+        ${!hasDocsOrigin && !route.kb_stale ? '<span class="badge badge-unverified">Unverified</span>' : ''}
+      </div>
+    `;
+    card.appendChild(recommendedCard);
+
+    // Why? Collapsible Section
+    const whySection = document.createElement('details');
+    whySection.className = 'why-section';
+    whySection.innerHTML = `
+      <summary class="why-collapsible summary">Why this recommendation?</summary>
+      <div class="why-collapsible details">
+        <pre class="turn-context-pre" id="why-text"></pre>
+        <div class="why-sources" id="why-sources"></div>
+      </div>
+    `;
+    card.appendChild(whySection);
+
+    // Refresh knowledge and Open sources buttons
+    const kbButtons = document.createElement('div');
+    kbButtons.className = 'kb-buttons';
+    kbButtons.innerHTML = `
+      <button type="button" class="btn-secondary refresh-kb" aria-label="Refresh knowledge">Refresh knowledge</button>
+      <button type="button" class="btn-primary open-sources" aria-label="Open sources">Open sources</button>
+    `;
+    card.appendChild(kbButtons);
+
+    // Reasoning Card
+    const reasonCard = document.createElement('div');
+    reasonCard.className = 'info-card reason-card';
+    reasonCard.innerHTML = `
+      <span class="info-label">Reasoning</span>
+      <p class="info-content">${escapeHtml(route.reason || '')}</p>
+    `;
+    card.appendChild(reasonCard);
+
+    // Policy Gate Card
+    if (why) {
+      const policyCard = document.createElement('div');
+      policyCard.className = 'info-card policy-card';
+      policyCard.innerHTML = `
+        <span class="info-label">Policy Gate</span>
+        <p class="info-content">${escapeHtml(why)}</p>
+      `;
+      card.appendChild(policyCard);
+    }
+
+    // Collapsible Context Drawer (What was shared)
+    const snippet = data.contextSnippet || '';
+    if (snippet) {
+      const contextDetails = document.createElement('details');
+      contextDetails.className = 'turn-context-details';
+      contextDetails.innerHTML = `
+        <summary>What was shared (${snippet.length} context chars)</summary>
+        <div class="turn-context-body">
+          <pre class="turn-context-pre">${escapeHtml(snippet)}</pre>
+        </div>
+      `;
+      card.appendChild(contextDetails);
+    }
+
+    // Implementation Plan Section
+    const planSection = document.createElement('div');
+    planSection.className = 'card-section';
+    planSection.innerHTML = `
+      <div class="section-title">Implementation Plan</div>
+      <label class="field-label">Paste Plan</label>
+      <textarea class="turn-plan-text" rows="4" placeholder="Paste the implementation plan you received…">${escapeHtml(data.plan || '')}</textarea>
+      <div class="plan-actions">
+        <button type="button" class="btn-secondary turn-paste-clipboard">📋 Paste clipboard</button>
+        <button type="button" class="btn-primary turn-save-plan">💾 Save plan</button>
+      </div>
+      <p class="status-msg turn-plan-status" role="status" aria-live="polite"></p>
+    `;
+
+    const planTextarea = planSection.querySelector('.turn-plan-text');
+    const pasteBtn = planSection.querySelector('.turn-paste-clipboard');
+    const saveBtn = planSection.querySelector('.turn-save-plan');
+    const planStatusEl = planSection.querySelector('.turn-plan-status');
+
+    pasteBtn?.addEventListener('click', () => {
+      activePlanTextarea = planTextarea;
+      vscode.postMessage({ type: 'readClipboard' });
+    });
+
+    saveBtn?.addEventListener('click', () => {
+      const planVal = (planTextarea?.value || '').trim();
+      if (!taskId) {
+        showToast('Route a task first.', 'warning');
+        return;
+      }
+      if (!planVal) {
+        if (planStatusEl) planStatusEl.textContent = 'Paste a plan first.';
+        showToast('Paste a plan first.', 'warning');
+        return;
+      }
+      if (new TextEncoder().encode(planVal).length > 100 * 1024) {
+        if (planStatusEl) planStatusEl.textContent = 'Keep the plan under 100 KB.';
+        showToast('Keep the plan under 100 KB.', 'error');
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="spinner"></span> Saving…';
+      if (planStatusEl) planStatusEl.innerHTML = '<span class="spinner"></span> Saving plan…';
+      vscode.postMessage({ type: 'savePlan', taskId, plan: planVal });
+    });
+
+    card.appendChild(planSection);
+
+    // Run or Open Destination Controls
+    const controlsSection = document.createElement('div');
+    controlsSection.className = 'card-section';
+    controlsSection.innerHTML = `
+      <div class="section-title">Run or Open</div>
+      <div class="task-controls"></div>
+      <p class="status-msg turn-task-status" role="status" aria-live="polite"></p>
+      <p class="outcome-msg turn-task-outcome">${data.outcome ? `Outcome: ${escapeHtml(data.outcome)}` : ''}</p>
+    `;
+
+    const controlsContainer = controlsSection.querySelector('.task-controls');
+    if (controlsContainer) {
+      taskActions.render(controlsContainer, {
+        id: taskId,
+        route,
+        decision: action,
+        status: data.status || (action === 'BLOCK' ? 'blocked' : 'routed'),
+        saved: data.saved !== false,
+      });
+    }
+
+    card.appendChild(controlsSection);
+
+    turnEl.append(header, card);
+    turnEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
 
   // ---------------------------------------------------------------------------
   // Voice Input
@@ -343,82 +649,139 @@
   if (micBtn) {
     micBtn.removeAttribute('title');
     micBtn.addEventListener('click', () => {
+      if (!hasProject) {
+        showToast('Please open or create a project first before recording tasks.', 'warning');
+        return;
+      }
       micBtn.disabled = true;
       micBtn.classList.add('recording');
       micBtn.setAttribute('data-tooltip', 'Recording speech…');
       micBtn.setAttribute('aria-label', 'Recording speech…');
-      status.innerHTML = '<span class="spinner"></span> Opening recorder in VS Code…';
+      showToast('Opening voice recorder in VS Code…', 'info', 3000);
       vscode.postMessage({ type: 'startVoiceRecorder' });
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Form Submission
+  // Form Submission (Single Step, Auto-Clean, No Disappearing History)
   // ---------------------------------------------------------------------------
-  form.addEventListener('submit', (event) => {
+  form?.addEventListener('submit', (event) => {
     event.preventDefault();
-    const promptText = task.value.trim();
-    if (!promptText || submit.disabled) {
+    if (!hasProject) {
+      showToast('Please open or create a project before routing tasks.', 'warning');
+      return;
+    }
+    const promptText = (task?.value || '').trim();
+    if (!promptText || submit?.disabled) {
       if (!promptText) {
         showToast('Please enter a coding task before routing.', 'warning');
       }
       return;
     }
 
-    if (chatMessages && promptText) {
-      const userTurn = document.createElement('div');
-      userTurn.className = 'user-message-turn';
-      const bubble = document.createElement('div');
-      bubble.className = 'user-message-bubble';
-      bubble.textContent = promptText;
-      const meta = document.createElement('div');
-      meta.className = 'user-turn-meta';
-      meta.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      userTurn.append(bubble, meta);
-      chatMessages.appendChild(userTurn);
-      if (heroState) heroState.style.display = 'none';
-      userTurn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    // 1. Immediately clear the prompt input box and draft state
+    if (task) {
+      task.value = '';
+      task.style.height = 'auto';
+      task.style.height = '38px';
+      vscode.setState({ task: '' });
     }
 
-    if (!ready) {
-      prepareContext();
-      return;
-    }
-    submit.disabled = true;
-    refresh.disabled = true;
-    sourceList.querySelectorAll('input').forEach((input) => { input.disabled = true; });
-    card.hidden = true;
-    if (overrideCard) overrideCard.hidden = true;
+    // 2. Hide hero state
+    if (heroState) heroState.style.display = 'none';
+
+    // 3. Append user message to stream
+    appendUserMessage(promptText, new Date().toISOString());
+
+    // 4. Append assistant loading turn
+    const reqId = ++requestId;
+    appendAssistantLoadingTurn(reqId, promptText);
+
+    // 5. Update submit button state & discover resources
     setSubmitButtonState('route', true);
-    status.innerHTML = '<span class="spinner"></span> Routing task via Gemma…';
+    if (submit) submit.disabled = true;
     resourcesManager?.setSearching(promptText);
-    vscode.postMessage({ type: 'routeTask', text: promptText, requestId, sources: [...selected] });
+
+    // 6. Post routeTask to extension
+    vscode.postMessage({
+      type: 'routeTask',
+      text: promptText,
+      requestId: reqId,
+      sources: [...selected],
+    });
   });
 
   // ---------------------------------------------------------------------------
-  // Message Handling
+  // Extension Message Handling
   // ---------------------------------------------------------------------------
   window.addEventListener('message', ({ data }) => {
-    if (data?.type === 'resourcesSearching') {
+    if (!data || typeof data !== 'object') return;
+
+    if (data.type === 'projectState') {
+      hasProject = data.hasProject === true;
+      if (chatNoProjectBanner) {
+        chatNoProjectBanner.hidden = hasProject;
+      }
+      if (task) {
+        task.disabled = !hasProject;
+        task.placeholder = hasProject
+          ? 'Ask Baton to edit, route, or build... (Enter to route, Shift+Enter for newline)'
+          : 'Please open or create a project first...';
+      }
+      if (submit) submit.disabled = !hasProject;
+      if (micBtn) micBtn.disabled = !hasProject;
+      if (newSessionHeaderBtn) newSessionHeaderBtn.disabled = !hasProject;
+      if (!hasProject) {
+        if (sessionChip) sessionChip.textContent = 'No project open';
+      }
+      return;
+    }
+
+    if (data.type === 'resourcesSearching') {
       resourcesManager?.setSearching(data.query);
       return;
     }
-    if (data?.type === 'resourcesReady') {
+
+    if (data.type === 'resourcesReady') {
       setSidebarCollapsed(false);
       resourcesManager?.renderResources(data.resources);
       return;
     }
-    if (data?.type === 'activeSession') {
+
+    if (data.type === 'activeSession') {
       const session = data.session;
       if (sessionChip) {
-        sessionChip.textContent = session?.title || 'New session';
+        sessionChip.textContent = session?.title || 'New task';
       }
       if (chatMessages) {
         chatMessages.replaceChildren();
       }
-      card.hidden = true;
-      if (session?.title && session.title !== 'New session') {
+
+      const turns = session?.turns || [];
+      if (turns.length > 0) {
         if (heroState) heroState.style.display = 'none';
+        turns.forEach((turn) => {
+          if (turn.role === 'user') {
+            appendUserMessage(turn.content, turn.createdAt);
+          } else if (turn.role === 'assistant') {
+            const turnEl = document.createElement('div');
+            turnEl.className = 'assistant-turn';
+            chatMessages?.appendChild(turnEl);
+            renderAssistantTurn(turnEl, {
+              taskId: turn.taskId,
+              route: turn.route,
+              decision: turn.decision,
+              routerTier: turn.routerTier,
+              status: turn.status,
+              plan: turn.plan,
+              outcome: turn.outcome,
+              contextSnippet: turn.contextSnippet,
+              why: turn.why,
+              overrode: turn.overrides,
+              saved: true,
+            });
+          }
+        });
       } else {
         if (heroState) heroState.style.display = 'flex';
         resourcesManager?.renderResources({
@@ -429,308 +792,208 @@
           notice: 'Related YouTube tutorials, blogs, and documentation resources will appear here as you prompt Baton.',
         });
       }
-      if (session?.turns && session.turns.length > 0) {
-        session.turns.forEach((turn) => {
-          if (turn.role === 'user') {
-            const userTurn = document.createElement('div');
-            userTurn.className = 'user-message-turn';
-            const bubble = document.createElement('div');
-            bubble.className = 'user-message-bubble';
-            bubble.textContent = turn.content;
-            userTurn.append(bubble);
-            chatMessages.appendChild(userTurn);
-          }
-        });
-      }
       return;
     }
-    if (data?.type === 'personalKeysStatus') {
+
+    if (data.type === 'personalKeysStatus') {
       for (const provider of ['gemma', 'elevenlabs']) {
         const configured = data.configured?.[provider] === true;
-        document.getElementById(`${provider}-key-status`).textContent = configured
-          ? 'Your key is active' : 'Using default if available';
-        document.querySelector(`.remove-key[data-provider="${provider}"]`).disabled = !configured;
+        const statusEl = document.getElementById(`${provider}-key-status`);
+        if (statusEl) {
+          statusEl.textContent = configured ? 'Your key is active' : 'Using default if available';
+        }
+        const removeBtn = document.querySelector(`.remove-key[data-provider="${provider}"]`);
+        if (removeBtn) removeBtn.disabled = !configured;
       }
-      settingsStatus.textContent = data.notice || '';
+      if (settingsStatus) settingsStatus.textContent = data.notice || '';
       if (data.notice) showToast(data.notice, data.notice.startsWith('Could not') ? 'error' : 'success');
       return;
     }
-    if (data?.type === 'handoffResult') {
-      planStatus.textContent = data.notice || '';
+
+    if (data.type === 'handoffResult') {
       showToast(data.notice || 'Prompt ready.', 'info', 4000);
-      openHandoffExternal.dataset.target = data.externalTarget || '';
-      handoffFallback.hidden = !data.externalTarget;
+      if (openHandoffExternal) {
+        openHandoffExternal.dataset.target = data.externalTarget || '';
+      }
+      if (handoffFallback) {
+        handoffFallback.hidden = !data.externalTarget;
+      }
       return;
     }
-    if (data?.type === 'handoffExternalResult') {
+
+    if (data.type === 'handoffExternalResult') {
       showToast(data.notice || 'Opened externally.', 'info', 3500);
       return;
     }
-    if (data?.type === 'voiceRecorderReady') {
-      status.textContent = 'Recorder opened in VS Code. Click Start Recording in that tab.';
+
+    if (data.type === 'voiceRecorderReady') {
+      showToast('Recorder opened in VS Code. Click Start Recording in that tab.', 'info', 4000);
       return;
     }
-    if (data?.type === 'voiceTranscribing') {
-      status.innerHTML = '<span class="spinner"></span> Transcribing speech…';
+
+    if (data.type === 'voiceTranscribing') {
+      showToast('Transcribing speech…', 'info', 3000);
       return;
     }
-    if (data?.type === 'mcpStatus') {
-      mcpBtn.disabled = false;
-      mcpBtn.textContent = data.running ? 'Stop MCP' : 'Start MCP';
-      mcpBtn.title = data.running ? 'Stop the Baton MCP server' : 'Start the Baton MCP server';
-      mcpConnection.hidden = !data.running;
-      mcpEndpoint.textContent = data.running ? `${data.command} "${data.endpoint}"` : '';
+
+    if (data.type === 'mcpStatus') {
+      if (mcpBtn) {
+        mcpBtn.disabled = false;
+        mcpBtn.textContent = data.running ? 'Stop MCP' : 'Start MCP';
+        mcpBtn.title = data.running ? 'Stop the Baton MCP server' : 'Start the Baton MCP server';
+      }
+      if (mcpConnection) mcpConnection.hidden = !data.running;
+      if (mcpEndpoint) mcpEndpoint.textContent = data.running ? `${data.command} "${data.endpoint}"` : '';
       if (data.notice) showToast(data.notice, data.running ? 'success' : 'info', 3500);
       return;
     }
-    if (data?.type === 'taskActionResult') {
-      if (data.taskId === currentTaskId) {
-        taskStatus.textContent = data.notice;
-        showToast(data.notice, 'info', 3500);
+
+    if (data.type === 'taskActionResult') {
+      const turnEl = chatMessages?.querySelector(`[data-task-id="${data.taskId}"]`);
+      if (turnEl) {
+        const taskStatusEl = turnEl.querySelector('.turn-task-status');
+        if (taskStatusEl) taskStatusEl.textContent = data.notice || '';
+        showToast(data.notice || 'Action executed.', 'info', 3500);
       }
       return;
     }
 
-    if (data?.type === 'history') {
-      const current = data.tasks.find((entry) => entry.id === currentTaskId);
-      if (current) {
-        taskActions.render(controls, current);
-        taskOutcome.textContent = `Status: ${current.status}` + (current.outcome ? ` · Outcome: ${current.outcome}` : '');
-        updateStepper(current.status, Boolean(current.plan));
-      }
-      if (data.changed) {
-        ready = false;
-        preview.hidden = true;
-        setSubmitButtonState('prepare', false);
+    if (data.type === 'history') {
+      for (const t of data.tasks || []) {
+        const turnEl = chatMessages?.querySelector(`[data-task-id="${t.id}"]`);
+        if (turnEl) {
+          const outcomeEl = turnEl.querySelector('.turn-task-outcome');
+          if (outcomeEl) outcomeEl.textContent = `Status: ${t.status}` + (t.outcome ? ` · Outcome: ${t.outcome}` : '');
+          const stepper = turnEl.querySelector('.stepper');
+          updateTurnStepper(stepper, t.status, Boolean(t.plan));
+        }
       }
       return;
     }
 
-    if (data?.type === 'voiceText') {
+    if (data.type === 'voiceText') {
       if (micBtn) {
         micBtn.disabled = false;
         micBtn.classList.remove('recording');
         micBtn.setAttribute('data-tooltip', 'Speak task (ElevenLabs Voice Input)');
         micBtn.setAttribute('aria-label', 'Speak task (ElevenLabs Voice Input)');
-        micBtn.removeAttribute('title');
       }
       const spoken = (data.text || '').trim();
-      if (spoken) {
+      if (spoken && task) {
         task.value = spoken;
-        task.dispatchEvent(new Event('input'));
-        status.textContent = `Transcribed: "${spoken}"`;
+        task.style.height = 'auto';
+        task.style.height = `${Math.min(Math.max(task.scrollHeight, 38), 160)}px`;
+        vscode.setState({ task: spoken });
         showToast(`Transcribed: "${spoken}"`, 'success', 2500);
         if (data.autoRoute) {
-          pendingAutoRoute = true;
-          status.innerHTML = `<span class="spinner"></span> Auto-routing: "${spoken}"…`;
-          form.dispatchEvent(new Event('submit', { cancelable: true }));
+          form?.dispatchEvent(new Event('submit', { cancelable: true }));
         }
       } else {
-        status.textContent = 'No speech detected.';
         showToast('No speech detected.', 'warning');
       }
       return;
     }
 
-    if (data?.type === 'voiceError') {
+    if (data.type === 'voiceError') {
       if (micBtn) {
         micBtn.disabled = false;
         micBtn.classList.remove('recording');
         micBtn.setAttribute('data-tooltip', 'Speak task (ElevenLabs Voice Input)');
         micBtn.setAttribute('aria-label', 'Speak task (ElevenLabs Voice Input)');
-        micBtn.removeAttribute('title');
       }
       const msg = data.message || 'Voice transcription error.';
-      status.textContent = msg;
       showToast(msg, msg.includes('cancelled') ? 'info' : 'error');
       return;
     }
 
-    if (data?.type === 'clipboardContent') {
-      if (typeof data.text === 'string' && data.text) {
-        planText.value = data.text;
-        planStatus.textContent = 'Clipboard content pasted.';
+    if (data.type === 'clipboardContent') {
+      if (typeof data.text === 'string' && data.text && activePlanTextarea) {
+        activePlanTextarea.value = data.text;
         showToast('Plan pasted from clipboard.', 'success', 2500);
       } else {
-        planStatus.textContent = 'Clipboard was empty.';
         showToast('Clipboard was empty.', 'warning', 2500);
       }
       return;
     }
 
-    if (data?.type === 'planSaved') {
-      savePlanBtn.disabled = false;
-      savePlanBtn.innerHTML = '💾 Save plan';
-      planStatus.textContent = data.notice ?? 'Plan saved to memory.';
+    if (data.type === 'planSaved') {
+      const turnEl = chatMessages?.querySelector(`[data-task-id="${data.taskId}"]`);
+      if (turnEl) {
+        const saveBtn = turnEl.querySelector('.turn-save-plan');
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '💾 Save plan';
+        }
+        const planStatusEl = turnEl.querySelector('.turn-plan-status');
+        if (planStatusEl) planStatusEl.textContent = data.notice ?? 'Plan saved to memory.';
+        const stepper = turnEl.querySelector('.stepper');
+        updateTurnStepper(stepper, 'planned', true);
+      }
       showToast(data.notice ?? 'Plan saved to memory.', 'success', 3500);
-      updateStepper('planned', true);
-      ready = false;
-      preview.hidden = true;
-      setSubmitButtonState('prepare', false);
       return;
     }
 
-    if (data?.type === 'planSaveError') {
-      savePlanBtn.disabled = false;
-      savePlanBtn.innerHTML = '💾 Save plan';
-      const msg = data.message ?? 'Could not save plan.';
-      planStatus.textContent = msg;
-      showToast(msg, 'error');
-      return;
-    }
-
-    if (data?.requestId !== requestId) return;
-
-    if (data.type === 'contextPreview') {
-      parts = data.parts;
-      limit = data.limit;
-      selected.clear();
-      sourceList.replaceChildren();
-      for (const part of parts) {
-        selected.add(part.source);
-        const label = document.createElement('label');
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = true;
-        checkbox.addEventListener('change', () => {
-          if (checkbox.checked) selected.add(part.source);
-          else selected.delete(part.source);
-          card.hidden = true;
-          if (overrideCard) overrideCard.hidden = true;
-          updatePreview();
-        });
-        label.append(checkbox, document.createTextNode(` ${part.source} — ${part.text.length} chars`));
-        sourceList.append(label);
+    if (data.type === 'planSaveError') {
+      const turnEl = chatMessages?.querySelector(`[data-task-id="${data.taskId}"]`);
+      if (turnEl) {
+        const saveBtn = turnEl.querySelector('.turn-save-plan');
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '💾 Save plan';
+        }
+        const planStatusEl = turnEl.querySelector('.turn-plan-status');
+        if (planStatusEl) planStatusEl.textContent = data.message ?? 'Could not save plan.';
       }
-      if (!parts.length) sourceList.textContent = 'No eligible context sources. Only your task will be shared.';
-      ready = true;
-      submit.disabled = false;
-      refresh.disabled = false;
+      showToast(data.message ?? 'Could not save plan.', 'error');
+      return;
+    }
+
+    if (data.type === 'routeError') {
+      if (submit) submit.disabled = false;
       setSubmitButtonState('route', false);
-      preview.hidden = false;
-      preview.open = true;
-      status.textContent = 'Review the sources, then route your task.';
-      updatePreview();
-      if (pendingAutoRoute) {
-        pendingAutoRoute = false;
-        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      const turnEl = chatMessages?.querySelector(`[data-request-id="${data.requestId}"]`);
+      if (turnEl) {
+        const loadingCard = turnEl.querySelector('.assistant-loading-card');
+        if (loadingCard) {
+          loadingCard.textContent = 'Could not route this task. Please try again.';
+          loadingCard.style.color = 'var(--baton-error)';
+        }
       }
-      return;
-    }
-
-    refresh.disabled = false;
-    sourceList.querySelectorAll('input').forEach((input) => { input.disabled = false; });
-
-    if (data?.type === 'routeError') {
-      submit.disabled = false;
-      setSubmitButtonState(ready ? 'route' : 'prepare', false);
-      status.textContent = 'Could not prepare or route this task. Please try again.';
       showToast('Could not route this task. Check connection or try again.', 'error');
       return;
     }
 
-    if (data?.type !== 'routed' || !data.decision?.route) return;
+    if (data.type === 'routed' && data.decision?.route) {
+      if (submit) submit.disabled = false;
+      setSubmitButtonState('route', false);
 
-    currentTaskId = data.taskId || '';
-    vscode.postMessage({ type: 'handoffAvailabilityRequest' });
-    submit.disabled = false;
-    setSubmitButtonState('route', false);
-    status.textContent = (data.saved ? 'Saved to memory. Choose a destination below.'
-      : 'Route ready, but local memory could not be saved.') + (data.notice ? ` ${data.notice}` : '');
+      let turnEl = chatMessages?.querySelector(`[data-request-id="${data.requestId}"]`);
+      if (!turnEl) {
+        // Fallback: create turn element
+        turnEl = document.createElement('div');
+        turnEl.className = 'assistant-turn';
+        chatMessages?.appendChild(turnEl);
+      }
 
-    if (data.text !== task.value) return;
+      renderAssistantTurn(turnEl, data);
+      vscode.postMessage({ type: 'handoffAvailabilityRequest' });
 
-    const { route, action, why } = data.decision;
-    taskStatus.textContent = '';
-    taskOutcome.textContent = '';
-    taskActions.render(controls, {
-      id: currentTaskId,
-      route,
-      decision: action,
-      status: action === 'BLOCK' ? 'blocked' : 'routed',
-      saved: data.saved,
-    });
+      const action = data.decision?.action;
+      const route = data.decision?.route;
+      const isOverride = Boolean(data.decision?.overrides)
+        || /danger\s+keyword\s+raised\s+risk/i.test(data.decision?.why || '')
+        || /raised\s+risk/i.test(data.decision?.why || '');
 
-    if (!['low', 'moderate', 'high'].includes(route.risk_tier)) return;
-
-    // Risk badge
-    const risk = document.getElementById('risk');
-    risk.textContent = `${route.risk_tier} risk`;
-    risk.className = `risk risk-${route.risk_tier}`;
-
-    // Route details
-    document.getElementById('route-type').textContent = route.task_type;
-    document.getElementById('destination').textContent = route.recommended_destination;
-    document.getElementById('research').textContent = route.research_needed ? 'Yes' : 'No';
-    document.getElementById('reason').textContent = route.reason;
-    document.getElementById('action').textContent = action;
-    document.getElementById('policy-why').textContent = why;
-
-    const routerTierEl = document.getElementById('router-tier');
-    if (routerTierEl) routerTierEl.textContent = tiers[data.tier] ?? '';
-    const routerNotice = document.getElementById('router-notice');
-    routerNotice.textContent = data.notice || '';
-    routerNotice.hidden = !data.notice;
-
-    // Small "Router: Gemma | Ollama | Rules" chip
-    updateRouterChip(data.tier);
-
-    // Status stepper (Routed > Planned > Running > Done)
-    updateStepper(action === 'BLOCK' ? 'blocked' : 'routed', false);
-
-    // Visible "Policy overrode the model" note when policy raised risk
-    const isOverride = Boolean(data.decision?.overrode)
-      || /danger\s+keyword\s+raised\s+risk/i.test(why)
-      || /raised\s+risk/i.test(why);
-
-    if (overrideCard) {
-      if (isOverride) {
-        overrideCard.hidden = false;
-        if (overrideText) {
-          overrideText.textContent = why || 'Risk elevated to high by safety policy. Manual handling required; never auto-run.';
-        }
+      if (action === 'BLOCK') {
+        showToast('Task blocked by policy. Enter a valid coding task.', 'warning');
+      } else if (isOverride) {
+        showToast('Policy overrode the model: risk elevated to high.', 'warning', 4500);
       } else {
-        overrideCard.hidden = true;
+        showToast(`Routed via ${tiers[data.tier] ?? data.tier}. Risk: ${route.risk_tier}.`, 'info', 3000);
       }
     }
-
-    card.hidden = false;
-    planSection.hidden = false;
-
-    if (action === 'BLOCK') {
-      showToast('Task blocked by policy. Enter a valid coding task.', 'warning');
-    } else if (isOverride) {
-      showToast('Policy overrode the model: risk elevated to high.', 'warning', 4500);
-    } else {
-      showToast(`Routed via ${tiers[data.tier] ?? data.tier}. Risk: ${route.risk_tier}.`, 'info', 3000);
-    }
   });
 
-  useClipboardBtn.addEventListener('click', () => {
-    vscode.postMessage({ type: 'readClipboard' });
-  });
-
-  savePlanBtn.addEventListener('click', () => {
-    if (!currentTaskId) {
-      planStatus.textContent = 'Route a task first.';
-      showToast('Route a task first.', 'warning');
-      return;
-    }
-    const plan = planText.value.trim();
-    if (!plan) {
-      planStatus.textContent = 'Paste a plan first.';
-      showToast('Paste a plan first.', 'warning');
-      return;
-    }
-    if (new TextEncoder().encode(plan).length > 100 * 1024) {
-      planStatus.textContent = 'Keep the plan under 100 KB.';
-      showToast('Keep the plan under 100 KB.', 'error');
-      return;
-    }
-    savePlanBtn.disabled = true;
-    savePlanBtn.innerHTML = '<span class="spinner"></span> Saving…';
-    planStatus.innerHTML = '<span class="spinner"></span> Saving plan…';
-    vscode.postMessage({ type: 'savePlan', taskId: currentTaskId, plan });
-  });
   vscode.postMessage({ type: 'handoffAvailabilityRequest' });
+  vscode.postMessage({ type: 'checkProjectState' });
 })();

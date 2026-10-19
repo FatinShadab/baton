@@ -1,6 +1,6 @@
 import { MemoryStore } from './memory';
 import { JsonStore } from './store';
-import { HistoryMessage, HistoryReply, TaskRecord } from './types';
+import { HistoryMessage, HistoryReply, TaskRecord, StatsRecord } from './types';
 
 /** Manual task lifecycle; routing alone never marks work as completed. */
 export class TaskHistory {
@@ -35,6 +35,26 @@ export class TaskHistory {
       : task.workspaceUri === workspaceUri;
   }
 
+  private async recordOutcome(task: TaskRecord, outcome: 'Passed' | 'Failed' | 'Partial'): Promise<void> {
+    const availability = await this.store.loadAvailability();
+    const globalStorageUri = availability.globalStorageUri.fsPath;
+    const stats = await this.store.loadStats();
+    const agentId = task.route.recommended_destination || 'unknown';
+    const taskType = task.route.task_type || 'unknown';
+    const model = task.recommended_model || null;
+    const existing = stats.find((s) => s.agent_id === agentId && s.taskType === taskType && s.model === model);
+    let updated;
+    if (existing) {
+      const newTotal = existing.total + 1;
+      const newSuccess = outcome === 'Passed' ? existing.success + 1 : outcome === 'Partial' ? existing.success + 0.5 : existing.success;
+      updated = [...stats, { ...existing, total: newTotal, success: newSuccess }];
+    } else {
+      const newSuccess = outcome === 'Passed' ? 1 : outcome === 'Partial' ? 0.5 : 0;
+      updated = [...stats, { agent_id: agentId, model, taskType, total: 1, success: newSuccess }];
+    }
+    await this.store.saveStats(updated);
+  }
+
   save(id: string, change: { plan: string } | { outcome: 'Passed' | 'Failed' | 'Partial'; changedFiles?: string[] }): Promise<string> {
     const operation = this.pending.then(async () => {
       const task = await this.store.updateTask(id, (current) => {
@@ -51,6 +71,8 @@ export class TaskHistory {
           workspaceUri: task.workspaceUri,
           ...(kind === 'task' ? { outcome: task.outcome, changedFiles: task.changedFiles } : {}) },
       });
+      // Record outcome in stats
+      await this.recordOutcome(task, change.outcome as 'Passed' | 'Failed' | 'Partial');
       return indexed ? (kind === 'plan' ? 'Plan imported and added to memory.' : 'Completed task saved to memory.')
         : 'Task saved, but memory could not be saved. Retry to add it to search.';
     }).catch(() => 'Could not save this task. Please retry.');
@@ -59,8 +81,16 @@ export class TaskHistory {
   }
 
   private completedText(task: TaskRecord): string {
-    return [`Task: ${task.text}`, `Decision: ${task.decision}`, `Reason: ${task.route.reason}`,
+    const parts = [`Task: ${task.text}`, `Decision: ${task.decision}`, `Reason: ${task.route.reason}`,
       task.outcome ? `Outcome: ${task.outcome}` : 'Status: done',
-      task.changedFiles ? `Changed files:\n${task.changedFiles.join('\n') || '(none)'}` : 'Changed files: unavailable'].join('\n');
+      task.changedFiles ? `Changed files:\n${task.changedFiles.join('\n') || '(none)'}` : 'Changed files: unavailable'];
+    // Add model and reasoning if available
+    if (task.recommended_model) {
+      parts.push(`Model: ${task.recommended_model}`);
+    }
+    if (task.model_reasoning) {
+      parts.push(`Reasoning: ${task.model_reasoning}`);
+    }
+    return parts.join('\n');
   }
 }

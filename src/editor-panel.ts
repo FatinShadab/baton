@@ -110,12 +110,24 @@ export class BatonEditorPanel {
   }
 
   public async loadSession(sessionId: string): Promise<void> {
+    const project = this.historyProject();
+    if (!project) {
+      this.activeSession = undefined;
+      await this.postMessage({ type: 'projectState', hasProject: false });
+      return;
+    }
     const session = await this.store.getSession(sessionId);
     if (!session) return;
     this.activeSession = session;
     this.panel.title = `Baton · ${session.title.slice(0, 20)}`;
     const allTasks = (await this.store.loadTasks()) ?? [];
     const tasks = allTasks.filter((t) => session.taskIds?.includes(t.id));
+    await this.postMessage({
+      type: 'projectState',
+      hasProject: true,
+      projectName: project.name,
+      projectUri: project.uri,
+    });
     await this.postMessage({
       type: 'activeSession',
       session,
@@ -124,11 +136,22 @@ export class BatonEditorPanel {
   }
 
   public async startNewSession(): Promise<void> {
-    const workspaceUri = this.historyProject()?.uri;
-    const session = await this.store.createSession('New session', workspaceUri);
+    const project = this.historyProject();
+    if (!project) {
+      this.activeSession = undefined;
+      await this.postMessage({ type: 'projectState', hasProject: false });
+      return;
+    }
+    const session = await this.store.createSession('New task', project.uri);
     this.activeSession = session;
-    this.panel.title = 'Baton';
+    this.panel.title = 'Baton · New task';
     this.onSessionUpdated?.();
+    await this.postMessage({
+      type: 'projectState',
+      hasProject: true,
+      projectName: project.name,
+      projectUri: project.uri,
+    });
     await this.postMessage({
       type: 'activeSession',
       session,
@@ -136,8 +159,31 @@ export class BatonEditorPanel {
     });
   }
 
+  public async refreshProjectState(): Promise<void> {
+    const project = this.historyProject();
+    if (!project) {
+      this.activeSession = undefined;
+      await this.postMessage({ type: 'projectState', hasProject: false });
+    } else {
+      await this.postMessage({
+        type: 'projectState',
+        hasProject: true,
+        projectName: project.name,
+        projectUri: project.uri,
+      });
+      if (!this.activeSession) {
+        await this.startNewSession();
+      }
+    }
+  }
+
   private async init(sessionId?: string): Promise<void> {
     await this.renderHtml();
+    const project = this.historyProject();
+    if (!project) {
+      await this.postMessage({ type: 'projectState', hasProject: false });
+      return;
+    }
     if (sessionId) {
       await this.loadSession(sessionId);
     } else {
@@ -187,6 +233,15 @@ export class BatonEditorPanel {
 
   private async handleMessage(message: unknown): Promise<void> {
     if (typeof message === 'object' && message !== null && 'type' in message) {
+      if (message.type === 'openProject') {
+        await vscode.commands.executeCommand('vscode.openFolder');
+        return;
+      }
+      if (message.type === 'checkProjectState') {
+        await this.refreshProjectState();
+        return;
+      }
+
       if (message.type === 'newSession') {
         await this.startNewSession();
         return;
@@ -257,6 +312,17 @@ export class BatonEditorPanel {
 
     if (isTaskActionMessage(message)) {
       const reply = await this.codex.handle(message);
+      if (this.activeSession) {
+        const tasks = await this.store.loadTasks();
+        const updatedTask = tasks?.find((t) => t.id === message.taskId);
+        if (updatedTask) {
+          await this.store.updateSession(this.activeSession.id, (curr) => ({
+            ...curr,
+            turns: curr.turns?.map((t) => (t.taskId === message.taskId ? { ...t, status: updatedTask.status, outcome: updatedTask.outcome } : t)),
+          }));
+          this.activeSession = await this.store.getSession(this.activeSession.id);
+        }
+      }
       await this.postMessage(reply);
       await this.refreshHistory();
       return;
@@ -294,6 +360,13 @@ export class BatonEditorPanel {
           await this.postMessage({ type: 'handoffResult', ...outcome });
         } else if (message.type === 'savePlan') {
           const notice = await this.history.save(message.taskId, { plan: message.plan });
+          if (this.activeSession) {
+            await this.store.updateSession(this.activeSession.id, (curr) => ({
+              ...curr,
+              turns: curr.turns?.map((t) => (t.taskId === message.taskId ? { ...t, plan: message.plan, status: 'planned' } : t)),
+            }));
+            this.activeSession = await this.store.getSession(this.activeSession.id);
+          }
           await this.postMessage({ type: 'planSaved', taskId: message.taskId, notice });
           await this.refreshHistory();
         }
@@ -352,11 +425,19 @@ export class BatonEditorPanel {
         return;
       }
 
-      if (!this.preview || this.preview.requestId !== message.requestId || this.preview.text !== message.text) {
-        throw new Error('Prepare a context preview before routing.');
+      let snippet = '';
+      let collected: BuiltContext | undefined;
+      if (this.preview && this.preview.requestId === message.requestId && this.preview.text === message.text) {
+        collected = this.preview.context;
+        snippet = selectContext(this.preview.context, message.sources ?? []);
+      } else {
+        collected = await buildContext(message.text);
+        const sources = (message.sources && message.sources.length > 0)
+          ? message.sources
+          : collected.parts.map((p) => p.source);
+        snippet = selectContext(collected, sources);
       }
-      const snippet = selectContext(this.preview.context, message.sources);
-      const workspaceUri = this.preview.context.workspaceUri;
+      const workspaceUri = collected?.workspaceUri ?? this.historyProject()?.uri;
       const { route, tier, notice } = await routeTask(message.text, snippet, workspaceUri);
       const decision = decide(route, message.text);
       const taskId = randomUUID();
@@ -368,6 +449,12 @@ export class BatonEditorPanel {
         route: decision.route,
         routerTier: tier,
         decision: decision.action,
+        // KB routing metadata from the route
+        recommended_model: decision.route.recommended_model,
+        model_reasoning: decision.route.model_reasoning,
+        kb_refs: decision.route.kb_refs,
+        kb_stale: decision.route.kb_stale,
+        kb_note: decision.route.kb_note,
         workspaceUri,
         contextSnippet: snippet,
         status: decision.action === 'BLOCK' ? 'blocked' : 'routed',
@@ -377,7 +464,7 @@ export class BatonEditorPanel {
 
       // Update current session with this task and turn
       if (this.activeSession) {
-        const updatedTitle = this.activeSession.title === 'New session'
+        const updatedTitle = (this.activeSession.title === 'New task' || this.activeSession.title === 'New session')
           ? (message.text.length > 30 ? `${message.text.slice(0, 30)}…` : message.text)
           : this.activeSession.title;
 
@@ -404,6 +491,11 @@ export class BatonEditorPanel {
               decision: decision.action,
               routerTier: tier,
               status: decision.action === 'BLOCK' ? 'blocked' : 'routed',
+              contextSnippet: snippet,
+              why: decision.why,
+              overrode: decision.overrode,
+              recommended_model: decision.route.recommended_model,
+              model_reasoning: decision.route.model_reasoning,
             },
           ],
         }));
@@ -412,7 +504,18 @@ export class BatonEditorPanel {
         this.onSessionUpdated?.();
       }
 
-      reply = { type: 'routed', requestId: message.requestId, taskId, text: message.text, decision, tier, saved, notice };
+      reply = {
+        type: 'routed',
+        requestId: message.requestId,
+        taskId,
+        text: message.text,
+        decision,
+        tier,
+        saved,
+        notice,
+        contextSnippet: snippet,
+        contextParts: collected?.parts,
+      };
 
       // Discover related resources and media asynchronously
       const textToSearch = message.text;
