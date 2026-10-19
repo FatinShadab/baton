@@ -2,6 +2,36 @@ import * as vscode from 'vscode';
 
 export const KEY_NAMES = ['GEMINI_API_KEY', 'OLLAMA_API_KEY', 'ELEVENLABS_API_KEY'] as const;
 export type KeyName = typeof KEY_NAMES[number];
+export const PERSONAL_KEYS = {
+  gemma: 'BATON_PERSONAL_GEMINI_API_KEY',
+  elevenlabs: 'BATON_PERSONAL_ELEVENLABS_API_KEY',
+} as const;
+export type PersonalProvider = keyof typeof PERSONAL_KEYS;
+
+export async function preferredKey(secrets: vscode.SecretStorage, provider: PersonalProvider): Promise<string | undefined> {
+  return (await getKey(secrets, PERSONAL_KEYS[provider]))
+    ?? getKey(secrets, provider === 'gemma' ? 'GEMINI_API_KEY' : 'ELEVENLABS_API_KEY');
+}
+
+export async function personalKeyStatus(secrets: vscode.SecretStorage): Promise<Record<PersonalProvider, boolean>> {
+  return {
+    gemma: Boolean(await getKey(secrets, PERSONAL_KEYS.gemma)),
+    elevenlabs: Boolean(await getKey(secrets, PERSONAL_KEYS.elevenlabs)),
+  };
+}
+
+export async function savePersonalKey(secrets: vscode.SecretStorage, provider: PersonalProvider, value: string): Promise<boolean> {
+  return setKey(secrets, PERSONAL_KEYS[provider], value);
+}
+
+export async function clearPersonalKey(secrets: vscode.SecretStorage, provider: PersonalProvider): Promise<boolean> {
+  try {
+    await secrets.delete(PERSONAL_KEYS[provider]);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // F5 runs the extension from this repository, not from the demo workspace.
 // Import only known keys into SecretStorage; never expose .env to task context.
@@ -26,7 +56,7 @@ export async function importDevelopmentKeys(context: vscode.ExtensionContext): P
   }
 }
 
-export async function getKey(secrets: vscode.SecretStorage, name: KeyName): Promise<string | undefined> {
+export async function getKey(secrets: vscode.SecretStorage, name: KeyName | typeof PERSONAL_KEYS[PersonalProvider]): Promise<string | undefined> {
   try {
     const val = await secrets.get(name);
     if (val?.trim()) return val.trim();
@@ -36,7 +66,7 @@ export async function getKey(secrets: vscode.SecretStorage, name: KeyName): Prom
   return undefined;
 }
 
-export async function setKey(secrets: vscode.SecretStorage, name: KeyName, value: string): Promise<boolean> {
+export async function setKey(secrets: vscode.SecretStorage, name: KeyName | typeof PERSONAL_KEYS[PersonalProvider], value: string): Promise<boolean> {
   if (!value.trim()) return false;
   try {
     await secrets.store(name, value.trim());

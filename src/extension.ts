@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { importDevelopmentKeys, setKeys } from './secrets';
+import { clearPersonalKey, importDevelopmentKeys, personalKeyStatus, savePersonalKey, setKeys } from './secrets';
 import { JsonStore } from './store';
 import { initializeRouter, routeTask } from './router';
 import { decide } from './policy';
@@ -8,8 +8,9 @@ import { ExtensionMessage, isHandoffMessage, isHistoryMessage, isPanelMessage, i
 import { buildContext, BuiltContext, MAX_CONTEXT_CHARS, selectContext } from './context';
 import { initializeMemory, MemoryStore } from './memory';
 import { TaskHistory } from './history';
-import { handoffAvailability, planExternal, readClipboard } from './handoff';
-import { FallbackServerSession, initVoice, startVoiceFallbackServer, transcribe } from './voice';
+import { handoffAvailability, openExternalHandoff, planExternal, readClipboard } from './handoff';
+import { VoiceRecorderSession, initVoice, startVoiceRecorderServer, transcribe } from './voice';
+import { openIntegratedBrowser } from './browser';
 import { CodexRunner } from './codex';
 import { codexAvailable } from './terminal';
 import { copyMcpConfig, registerMcpProvider, serverOptions } from './mcp/config';
@@ -37,6 +38,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
   let pendingDemoTask: string | undefined;
 
   const DEMO_TASK = 'Fix the failing test in the date parser';
+
+  const historyProject = (demo = false): { uri: string; name: string } | undefined => {
+    if (demo) return { uri: vscode.Uri.joinPath(context.extensionUri, 'demo-repo').toString(), name: 'demo-repo' };
+    const editor = vscode.window.activeTextEditor;
+    const folder = (editor && vscode.workspace.getWorkspaceFolder(editor.document.uri))
+      ?? vscode.workspace.workspaceFolders?.find((entry) => entry.uri.scheme === 'file');
+    return folder?.uri.scheme === 'file' ? { uri: folder.uri.toString(), name: folder.name } : undefined;
+  };
 
   const sendDemoTask = async (view: vscode.WebviewView, taskText: string) => {
     try {
@@ -85,7 +94,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
         let preview: { requestId: number; text: string; demo: boolean; context: BuiltContext } | undefined;
         let latestPreview = 0;
         let lastRouted: { taskId: string; text: string; snippet: string } | undefined;
-        let fallbackSession: FallbackServerSession | undefined;
+        let recorderSession: VoiceRecorderSession | undefined;
+        let historyDemo = false;
+
+        const refreshHistory = async () => {
+          try {
+            await view.webview.postMessage(await history.handle({ type: 'loadHistory' }, historyProject(historyDemo)));
+          } catch { /* A closed sidebar can no longer receive messages. */ }
+        };
 
         const parseVoiceIntent = (raw: string): { text: string; autoRoute: boolean } => {
           const trimmed = raw.trim();
@@ -99,6 +115,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
 
         const listener = view.webview.onDidReceiveMessage(async (message: unknown) => {
           if (typeof message === 'object' && message !== null && 'type' in message
+            && (message.type === 'personalKeysStatus' || message.type === 'savePersonalKey' || message.type === 'clearPersonalKey')) {
+            const provider = 'provider' in message && (message.provider === 'gemma' || message.provider === 'elevenlabs')
+              ? message.provider : undefined;
+            let notice: string | undefined;
+            if (message.type === 'savePersonalKey' && provider) {
+              const value = 'value' in message && typeof message.value === 'string' ? message.value.trim() : '';
+              notice = value && value.length <= 4096 && await savePersonalKey(context.secrets, provider, value)
+                ? `${provider === 'gemma' ? 'Gemma' : 'ElevenLabs'} key saved.` : 'Could not save the key.';
+            } else if (message.type === 'clearPersonalKey' && provider) {
+              notice = await clearPersonalKey(context.secrets, provider)
+                ? `${provider === 'gemma' ? 'Gemma' : 'ElevenLabs'} key removed.` : 'Could not remove the key.';
+            }
+            try {
+              await view.webview.postMessage({ type: 'personalKeysStatus', configured: await personalKeyStatus(context.secrets), notice });
+            } catch { /* A closed sidebar can no longer receive messages. */ }
+            return;
+          }
+          if (typeof message === 'object' && message !== null && 'type' in message
             && (message.type === 'mcpToggle' || message.type === 'mcpStatusRequest' || message.type === 'mcpCopyConfig')) {
             if (message.type === 'mcpCopyConfig') {
               await copyMcpConfig(context);
@@ -110,7 +144,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
               if (instructions === 'created') notice += ' Added AGENTS.md to the project root.';
               if (instructions === 'failed') notice += ' Could not add AGENTS.md to the project root.';
             }
-            const options = mcp.running ? serverOptions(context) : undefined;
+            let options;
+            try { options = mcp.running ? serverOptions(context) : undefined; } catch { /* Workspace closed. */ }
             try { await view.webview.postMessage({ type: 'mcpStatus', running: mcp.running, command: options?.command, endpoint: options?.args[0], notice }); } catch { /* closed */ }
             return;
           }
@@ -118,13 +153,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
             const reply = await codex.handle(message);
             try {
               await view.webview.postMessage(reply);
-              await view.webview.postMessage(await history.handle({ type: 'loadHistory' }));
+              await refreshHistory();
             } catch { /* A closed sidebar can no longer receive messages. */ }
             return;
           }
           if (isHistoryMessage(message)) {
             try {
-              await view.webview.postMessage(await history.handle(message));
+              if (message.type === 'loadHistory') historyDemo = message.demo === true;
+              await view.webview.postMessage(await history.handle(message, historyProject(historyDemo)));
             } catch { /* A closed sidebar can no longer receive messages. */ }
             return;
           }
@@ -133,21 +169,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
               if (message.type === 'readClipboard') {
                 const text = await readClipboard();
                 await view.webview.postMessage({ type: 'clipboardContent', text });
+              } else if (message.type === 'openExternalHandoff') {
+                const notice = await openExternalHandoff(message.target);
+                await view.webview.postMessage({ type: 'handoffExternalResult', notice });
               } else if (message.type === 'handoffAvailabilityRequest') {
                 await view.webview.postMessage({ type: 'handoffAvailability', installed: await availableDestinations() });
               } else if (message.type === 'planExternal') {
                 let text = lastRouted?.taskId === message.taskId ? lastRouted.text : '';
-                const snippet = lastRouted?.taskId === message.taskId ? lastRouted.snippet : '';
+                let snippet = lastRouted?.taskId === message.taskId ? lastRouted.snippet : '';
                 if (!text) {
                   const tasks = await store.loadTasks();
-                  text = tasks?.find((t) => t.id === message.taskId)?.text ?? '';
+                  const task = tasks?.find((entry) => entry.id === message.taskId);
+                  text = task?.text ?? '';
+                  snippet = task?.contextSnippet ?? '';
                 }
-                const notice = await planExternal(message.target, text, snippet);
-                await view.webview.postMessage({ type: 'handoffResult', notice });
+                if (!text) {
+                  await view.webview.postMessage({ type: 'handoffResult', notice: 'Saved task not found. Refresh History and try again.' });
+                  return;
+                }
+                const outcome = await planExternal(message.target, text, snippet);
+                await view.webview.postMessage({ type: 'handoffResult', ...outcome });
               } else if (message.type === 'savePlan') {
                 const notice = await history.save(message.taskId, { plan: message.plan });
                 await view.webview.postMessage({ type: 'planSaved', taskId: message.taskId, notice });
-                await view.webview.postMessage(await history.handle({ type: 'loadHistory' }));
+                await refreshHistory();
               }
             } catch {
               try {
@@ -158,30 +203,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
           }
           if (isVoiceMessage(message)) {
             try {
-              if (message.type === 'voiceAudio') {
-                const buffer = Buffer.from(message.audioBase64, 'base64');
-                const transcript = await transcribe(buffer, message.mime, context.secrets);
-                const { text, autoRoute } = parseVoiceIntent(transcript);
-                await view.webview.postMessage({ type: 'voiceText', text, autoRoute });
-              } else if (message.type === 'startVoiceFallback') {
-                if (fallbackSession) {
-                  fallbackSession.close();
-                  fallbackSession = undefined;
+              recorderSession?.close();
+              recorderSession = await startVoiceRecorderServer(async (audioBuffer, mime) => {
+                try {
+                  await view.webview.postMessage({ type: 'voiceTranscribing' });
+                  const transcript = await transcribe(audioBuffer, mime, context.secrets);
+                  const { text, autoRoute } = parseVoiceIntent(transcript);
+                  await view.webview.postMessage({ type: 'voiceText', text, autoRoute });
+                } catch (err: unknown) {
+                  const errorMsg = err instanceof Error ? err.message : 'Transcription failed';
+                  await view.webview.postMessage({ type: 'voiceError', message: errorMsg });
+                } finally {
+                  recorderSession = undefined;
                 }
-                fallbackSession = await startVoiceFallbackServer(async (audioBuffer, mime) => {
-                  try {
-                    const transcript = await transcribe(audioBuffer, mime, context.secrets);
-                    const { text, autoRoute } = parseVoiceIntent(transcript);
-                    await view.webview.postMessage({ type: 'voiceText', text, autoRoute });
-                  } catch (err: unknown) {
-                    const errorMsg = err instanceof Error ? err.message : 'Transcription failed';
-                    await view.webview.postMessage({ type: 'voiceError', message: errorMsg });
-                  }
-                });
-                await vscode.env.openExternal(vscode.Uri.parse(fallbackSession.url));
-                void vscode.window.showInformationMessage('Recording in your browser, close the tab when done.');
-              }
+              }, (reason) => {
+                recorderSession = undefined;
+                void view.webview.postMessage({ type: 'voiceError', message: reason });
+              });
+              await openIntegratedBrowser(recorderSession.url);
+              await view.webview.postMessage({ type: 'voiceRecorderReady' });
             } catch (err: unknown) {
+              recorderSession?.close();
+              recorderSession = undefined;
               const errorMsg = err instanceof Error ? err.message : 'Voice recording error';
               await view.webview.postMessage({ type: 'voiceError', message: errorMsg });
             }
@@ -236,15 +279,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
             try { await view.webview.postMessage({ type: 'handoffAvailability', installed }); } catch { /* closed */ }
           }, () => { /* closed */ });
         });
+        const editorListener = vscode.window.onDidChangeActiveTextEditor(() => { void refreshHistory(); });
+        const workspaceListener = vscode.workspace.onDidChangeWorkspaceFolders(() => { void refreshHistory(); });
         view.onDidDispose(() => {
           if (activeWebviewView === view) {
             activeWebviewView = undefined;
           }
           listener.dispose();
           extensionListener.dispose();
-          if (fallbackSession) {
-            fallbackSession.close();
-            fallbackSession = undefined;
+          editorListener.dispose();
+          workspaceListener.dispose();
+          if (recorderSession) {
+            recorderSession.close();
+            recorderSession = undefined;
           }
         });
 

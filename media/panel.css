@@ -169,6 +169,22 @@ body {
   color: var(--vscode-foreground);
 }
 
+.handoff-fallback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--vscode-panel-border, rgba(127, 127, 127, 0.25));
+  border-radius: var(--baton-radius);
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.handoff-fallback[hidden] { display: none; }
+.handoff-fallback button { width: auto; }
+
 /* ==========================================================================
    Chat Panel Center Watermark
    ========================================================================== */
@@ -269,28 +285,6 @@ body {
 
 .demo-btn {
   color: var(--vscode-textLink-foreground, #3794ff);
-}
-
-.mic-btn.recording {
-  background: #cf222e !important;
-  color: #ffffff !important;
-  border-color: #cf222e !important;
-}
-
-.mic-btn.recording::after {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #fff;
-  animation: baton-pulse 1s infinite ease-in-out;
-}
-
-@keyframes baton-pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.3; transform: scale(0.6); }
-  100% { opacity: 1; transform: scale(1); }
 }
 
 textarea {
@@ -876,8 +870,26 @@ body.vscode-light .override-title,
 /* ==========================================================================
    History Pane Styles
    ========================================================================== */
+.settings-title { margin: 4px 0 6px; font-size: 15px; }
+.settings-help { margin: 0 0 16px; color: var(--vscode-descriptionForeground); font-size: 12px; }
+.personal-key-form { display: flex; flex-direction: column; gap: 7px; margin: 0 0 14px; padding: 12px; border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2)); border-radius: var(--baton-radius); }
+.personal-key-form label { font-weight: 600; }
+.key-status { color: var(--vscode-descriptionForeground); font-size: 11px; }
+.personal-key-form input { width: 100%; padding: 7px 8px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); border-radius: var(--baton-radius-sm); }
+.key-actions { display: flex; gap: 8px; }
+.key-actions button { flex: 1; margin: 0; }
+
 .history-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: 12px;
+}
+
+.history-project {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .history-actions button {

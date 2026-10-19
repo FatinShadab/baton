@@ -5,16 +5,23 @@ const PROVIDER_ID = 'baton.local-context';
 type McpDefinition = { cwd?: vscode.Uri };
 type McpApi = {
   lm?: { registerMcpServerDefinitionProvider?: (
-    id: string, provider: { provideMcpServerDefinitions: () => McpDefinition[] },
+    id: string, provider: { provideMcpServerDefinitions: () => McpDefinition[];
+      onDidChangeMcpServerDefinitions?: vscode.Event<void> },
   ) => vscode.Disposable };
   McpStdioServerDefinition?: new (
     label: string, command: string, args?: string[], env?: Record<string, string>,
   ) => McpDefinition;
 };
 
-export function serverOptions(context: vscode.ExtensionContext) {
-  const root = vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === 'file')?.uri
-    ?? context.extensionUri;
+function localFolders(): readonly vscode.WorkspaceFolder[] {
+  return vscode.workspace.workspaceFolders?.filter((folder) => folder.uri.scheme === 'file') ?? [];
+}
+
+export function serverOptions(context: vscode.ExtensionContext, folder?: vscode.WorkspaceFolder) {
+  const editor = vscode.window.activeTextEditor;
+  const active = editor && vscode.workspace.getWorkspaceFolder(editor.document.uri);
+  const root = (folder ?? (active?.uri.scheme === 'file' ? active : undefined) ?? localFolders()[0])?.uri;
+  if (!root) throw new Error('Open a local project folder before starting Baton MCP.');
   return {
     command: 'node',
     args: [vscode.Uri.joinPath(context.extensionUri, 'out', 'mcp.js').fsPath],
@@ -41,13 +48,16 @@ export function registerMcpProvider(context: vscode.ExtensionContext): void {
   const api = vscode as unknown as McpApi;
   if (!api.lm?.registerMcpServerDefinitionProvider || !api.McpStdioServerDefinition) return;
   try {
+    const changed = new vscode.EventEmitter<void>();
+    context.subscriptions.push(changed, vscode.workspace.onDidChangeWorkspaceFolders(() => changed.fire()));
     context.subscriptions.push(api.lm.registerMcpServerDefinitionProvider(PROVIDER_ID, {
-      provideMcpServerDefinitions: () => {
-        const { command, args, env, cwd } = serverOptions(context);
-        const definition = new api.McpStdioServerDefinition!('Baton project context', command, args, env);
+      onDidChangeMcpServerDefinitions: changed.event,
+      provideMcpServerDefinitions: () => localFolders().map((folder) => {
+        const { command, args, env, cwd } = serverOptions(context, folder);
+        const definition = new api.McpStdioServerDefinition!(`Baton: ${folder.name}`, command, args, env);
         definition.cwd = cwd;
-        return [definition];
-      },
+        return definition;
+      }),
     }));
   } catch {
     // Older VS Code versions do not expose the MCP provider API.

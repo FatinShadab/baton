@@ -30,6 +30,8 @@ After editing TypeScript or webview files, rebuild with `npm run build` and relo
 
 ## Configure API keys
 
+Open **Settings** in the Baton sidebar to paste your own Google AI Studio (Gemma) or ElevenLabs key. Each key is stored in VS Code SecretStorage and takes priority over the corresponding default key. The panel shows whether your key is active, but never displays it after saving. Use **Remove** to return to the default key. This lets you continue with your own quota if a default key reaches its limit.
+
 Use **Baton: Set API Keys** in the Command Palette. Baton stores keys in VS Code SecretStorage, not in extension settings or task history. Leaving a prompt empty keeps the existing value.
 
 | Key | Used for |
@@ -50,7 +52,7 @@ Reload the Development Host after changing `.env`. This import is a development 
 
 ## Use Baton
 
-1. **Describe the task.** Type in the sidebar or use voice input. An ordinary task uses the open workspace.
+1. **Describe the task.** Type in the sidebar or click the mic to record in a VS Code integrated browser tab. An ordinary task uses the open workspace.
 2. **Prepare context.** Review the source preview and deselect anything you do not want in the routing request. Baton sends only selected context, capped at 6,000 characters.
 3. **Route task.** Review the answering router, destination, risk, reason, and policy action. Model responses are validated before use; the policy gate runs after routing.
 4. **Prepare and save a plan.** Choose a planning handoff, review the generated prompt, and paste the assistant's plan into **Implementation Plan**. Save it in Baton.
@@ -60,24 +62,25 @@ Reload the Development Host after changing `.env`. This import is a development 
 
 | Destination | Baton handoff |
 | --- | --- |
-| ChatGPT / Codex | Opens the installed OpenAI Codex VS Code extension when available and copies the prompt for pasting. Otherwise opens ChatGPT in a browser. |
-| Gemini | Opens Gemini in a browser with the prompt copied for pasting. |
+| ChatGPT | Opens ChatGPT in VS Code's integrated browser with the prompt copied for pasting. |
+| Gemini | Opens Gemini in VS Code's integrated browser with the prompt copied for pasting. |
 | Claude Code | When its VS Code extension is installed, opens it with the prompt placed in its composer for review. |
 | Antigravity | When its VS Code extension is installed, opens its panel and copies the prompt for pasting. |
 
-Claude Code and Antigravity controls appear only when their extensions are detected. Baton does not read responses from those assistants; paste a plan back into the sidebar. **Run in Codex** uses the Codex CLI in a VS Code terminal, and Baton does not automatically infer whether that terminal run succeeded.
+The sites handle their own sign-in. If sign-in is blocked in VS Code, use **Open externally** in the sidebar; Baton never switches browsers automatically. Browser sign-in persistence follows VS Code's `workbench.browser.dataStorage` setting, and untrusted workspaces use ephemeral sessions. The voice recorder requests microphone permission in the integrated browser and returns the transcript to Baton. Claude Code and Antigravity controls appear only when their extensions are detected. Baton does not read responses from those assistants; paste a plan back into the sidebar. **Run in Codex** uses the Codex CLI in a VS Code terminal, and Baton does not automatically infer whether that terminal run succeeded.
 
 ## MCP server
 
-`npm run build` creates the stdio server at `out/mcp.js`. The sidebar's **Start MCP** button starts a local session and checks that the tools respond; **Stop MCP** closes it. Compatible VS Code versions can discover Baton's registered MCP provider. **Baton: Copy MCP Config** copies an `mcpServers` JSON snippet for an external client or a VS Code version that needs manual configuration.
+`npm run build` creates the stdio server at `out/mcp.js`. The sidebar's **Start MCP** button starts a local session and checks that the tools respond; **Stop MCP** closes it. Compatible VS Code versions can discover one Baton MCP server per local workspace folder. **Baton: Copy MCP Config** copies an `mcpServers` JSON snippet for an external client, scoped to the active editor's project (or the first folder). Copy it again after switching projects.
 
 | Tool | Returns |
 | --- | --- |
 | `get_project_overview` | README introduction and a shallow project file tree |
 | `search_project_context(query)` | Relevant saved project memories |
 | `get_active_plan` | The latest saved task with `planned` status |
+| `get_project_history` | The 20 most recent saved tasks for the project, with status and plan summaries |
 
-The MCP tools are read-only. The copied configuration points the server to the current workspace and Baton's local memory files.
+The MCP tools are read-only. Each server uses its project root to filter Baton's shared `tasks.json` and `memory.json`, so tasks and plans from other projects are excluded. An external client's copied configuration keeps the project root it had when copied.
 
 ## Data and security
 

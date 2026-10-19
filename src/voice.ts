@@ -1,7 +1,7 @@
 import * as http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import type { SecretStorage } from 'vscode';
-import { getKey } from './secrets';
+import { preferredKey } from './secrets';
 
 let activeSecrets: SecretStorage | undefined;
 
@@ -17,10 +17,10 @@ export async function transcribe(
   const secretStore = secrets ?? activeSecrets;
   let apiKey: string | undefined;
   if (secretStore) {
-    apiKey = await getKey(secretStore, 'ELEVENLABS_API_KEY');
+    apiKey = await preferredKey(secretStore, 'elevenlabs');
   }
   if (!apiKey?.trim()) {
-    throw new Error('ElevenLabs API key is missing. Set it with "Baton: Set API Keys".');
+    throw new Error('ElevenLabs API key is missing. Add your key in Baton Settings.');
   }
 
   const formData = new FormData();
@@ -69,21 +69,24 @@ export async function transcribe(
   }
 }
 
-export interface FallbackServerSession {
+export interface VoiceRecorderSession {
   url: string;
   close: () => void;
 }
 
-export async function startVoiceFallbackServer(
+export async function startVoiceRecorderServer(
   onAudioReceived: (audio: Buffer, mime: string) => Promise<void>,
-): Promise<FallbackServerSession> {
+  onStopped: (message: string) => void,
+): Promise<VoiceRecorderSession> {
   const token = randomUUID();
   let server: http.Server | undefined;
   let closed = false;
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
   const closeServer = () => {
     if (closed) return;
     closed = true;
+    if (timeoutTimer) clearTimeout(timeoutTimer);
     if (server) {
       try {
         server.close();
@@ -93,7 +96,13 @@ export async function startVoiceFallbackServer(
     }
   };
 
-  const timeoutTimer = setTimeout(() => closeServer(), 180_000);
+  const stopWithError = (message: string) => {
+    if (closed) return;
+    closeServer();
+    onStopped(message);
+  };
+
+  timeoutTimer = setTimeout(() => stopWithError('Voice recording timed out. Click the mic to try again.'), 180_000);
 
   server = http.createServer(async (req, res) => {
     const reqUrl = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
@@ -106,31 +115,53 @@ export async function startVoiceFallbackServer(
     }
 
     if (req.method === 'GET' && (reqUrl.pathname === '/' || reqUrl.pathname === '/index.html')) {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(getFallbackHtml(token));
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+      res.end(getRecorderHtml(token));
+      return;
+    }
+
+    if (req.method === 'POST' && reqUrl.pathname === '/cancel') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"status":"cancelled"}');
+      const reason = reqUrl.searchParams.get('reason');
+      stopWithError(reason === 'permission-denied' ? 'Microphone permission denied in the VS Code browser.'
+        : reason === 'unavailable' ? 'Microphone recording is unavailable in the VS Code browser.'
+          : 'Voice recording cancelled.');
       return;
     }
 
     if (req.method === 'POST' && reqUrl.pathname === '/audio') {
       const chunks: Buffer[] = [];
       let totalBytes = 0;
+      let rejected = false;
       const MAX_BYTES = 25 * 1024 * 1024;
       const mime = req.headers['content-type'] || 'audio/webm';
 
       req.on('data', (chunk: Buffer) => {
         totalBytes += chunk.length;
         if (totalBytes > MAX_BYTES) {
-          req.destroy(new Error('Audio exceeds limit'));
+          if (!rejected) {
+            rejected = true;
+            res.writeHead(413, { 'Content-Type': 'text/plain' });
+            res.end('Audio exceeds the 25 MB limit.');
+            stopWithError('Audio exceeds the 25 MB limit.');
+          }
         } else {
           chunks.push(chunk);
         }
       });
 
       req.on('end', async () => {
+        if (rejected || closed) return;
+        if (!totalBytes) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('No audio received.');
+          stopWithError('No audio received. Click the mic to try again.');
+          return;
+        }
         const audioBuffer = Buffer.concat(chunks);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', received: totalBytes }));
-        clearTimeout(timeoutTimer);
         closeServer();
         try {
           await onAudioReceived(audioBuffer, mime);
@@ -140,8 +171,11 @@ export async function startVoiceFallbackServer(
       });
 
       req.on('error', () => {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Error receiving audio');
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Error receiving audio');
+        }
+        stopWithError('Could not receive audio. Click the mic to try again.');
       });
       return;
     }
@@ -154,25 +188,25 @@ export async function startVoiceFallbackServer(
     server!.listen(0, '127.0.0.1', () => {
       const addr = server!.address();
       if (!addr || typeof addr === 'string') {
-        reject(new Error('Could not bind voice fallback server'));
+        closeServer();
+        reject(new Error('Could not bind voice recorder server'));
         return;
       }
       resolve({
         url: `http://127.0.0.1:${addr.port}/?token=${token}`,
         close: () => {
-          clearTimeout(timeoutTimer);
           closeServer();
         },
       });
     });
     server!.on('error', (err) => {
-      clearTimeout(timeoutTimer);
+      closeServer();
       reject(err);
     });
   });
 }
 
-function getFallbackHtml(token: string): string {
+function getRecorderHtml(token: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -203,6 +237,7 @@ function getFallbackHtml(token: string): string {
       transition: background 0.2s;
     }
     #record-btn { background: #0969da; color: #fff; }
+    #cancel-btn { background: #eaeef2; color: #1f2328; margin-left: 8px; }
     #record-btn.recording {
       background: #cf222e;
       animation: pulse 1.2s infinite;
@@ -217,14 +252,39 @@ function getFallbackHtml(token: string): string {
   <h1>🎙️ Baton Voice Input</h1>
   <p>Speak your coding task. Click Stop when finished.</p>
   <button id="record-btn" type="button">Start Recording</button>
+  <button id="cancel-btn" type="button">Cancel</button>
   <div id="status">Ready</div>
 
   <script>
     const token = ${JSON.stringify(token)};
     const btn = document.getElementById('record-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
     const status = document.getElementById('status');
     let mediaRecorder = null;
+    let stream = null;
     let chunks = [];
+
+    async function stopSession(reason, message) {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.onstop = null;
+        mediaRecorder.stop();
+      }
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+      btn.disabled = true;
+      cancelBtn.disabled = true;
+      btn.classList.remove('recording');
+      status.className = reason === 'cancelled' ? '' : 'error';
+      status.textContent = message;
+      try {
+        await fetch('/cancel?token=' + encodeURIComponent(token) + '&reason=' + reason, {
+          method: 'POST', signal: AbortSignal.timeout(5000)
+        });
+      } catch { /* The recorder may already have expired. */ }
+    }
+
+    cancelBtn.addEventListener('click', () => {
+      void stopSession('cancelled', 'Recording cancelled. You can close this tab.');
+    });
 
     btn.addEventListener('click', async () => {
       if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -237,7 +297,8 @@ function getFallbackHtml(token: string): string {
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (!navigator.mediaDevices || !window.MediaRecorder) throw new Error('Microphone recording is unavailable.');
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         chunks = [];
         mediaRecorder = new MediaRecorder(stream);
         mediaRecorder.ondataavailable = (e) => {
@@ -250,23 +311,19 @@ function getFallbackHtml(token: string): string {
             const resp = await fetch('/audio?token=' + encodeURIComponent(token), {
               method: 'POST',
               headers: { 'Content-Type': blob.type },
-              body: blob
+              body: blob,
+              signal: AbortSignal.timeout(30000)
             });
             if (resp.ok) {
               status.className = 'success';
               status.textContent = 'Audio received! You can close this tab now.';
               btn.textContent = 'Uploaded ✅';
+              cancelBtn.disabled = true;
             } else {
-              status.className = 'error';
-              status.textContent = 'Upload failed: ' + resp.statusText;
-              btn.disabled = false;
-              btn.textContent = 'Retry';
+              await stopSession('unavailable', 'Audio upload failed: ' + resp.statusText);
             }
           } catch (err) {
-            status.className = 'error';
-            status.textContent = 'Network error: ' + err.message;
-            btn.disabled = false;
-            btn.textContent = 'Retry';
+            await stopSession('unavailable', 'Audio upload failed: ' + err.message);
           }
         };
         mediaRecorder.start();
@@ -274,8 +331,9 @@ function getFallbackHtml(token: string): string {
         btn.classList.add('recording');
         status.textContent = 'Recording… speak your task now.';
       } catch (err) {
-        status.className = 'error';
-        status.textContent = 'Microphone permission denied: ' + err.message;
+        const denied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+        await stopSession(denied ? 'permission-denied' : 'unavailable',
+          (denied ? 'Microphone permission denied: ' : 'Recorder unavailable: ') + err.message);
       }
     });
   </script>

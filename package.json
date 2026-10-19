@@ -5,7 +5,7 @@
   "version": "0.0.1",
   "publisher": "baton-dev",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.109.0"
   },
   "categories": [
     "Other"

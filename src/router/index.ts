@@ -16,7 +16,7 @@ export function initializeRouter(secrets: SecretStorage): Disposable {
   cache.clear();
   generation++;
   return secrets.onDidChange(({ key }) => {
-    if (key === 'GEMINI_API_KEY' || key === 'OLLAMA_API_KEY') {
+    if (key === 'GEMINI_API_KEY' || key === 'BATON_PERSONAL_GEMINI_API_KEY' || key === 'OLLAMA_API_KEY') {
       cache.clear();
       generation++;
     }

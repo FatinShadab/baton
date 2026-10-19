@@ -41,6 +41,12 @@
   <div class="tabs" role="tablist" aria-label="Baton views">
     <button id="task-tab" type="button" role="tab" aria-selected="true" aria-controls="task-pane">Task</button>
     <button id="history-tab" type="button" role="tab" aria-selected="false" aria-controls="history-pane" tabindex="-1">History</button>
+    <button id="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-pane" tabindex="-1">Settings</button>
+  </div>
+
+  <div id="handoff-fallback" class="handoff-fallback" hidden>
+    <span>If sign-in fails in VS Code, use your regular browser.</span>
+    <button id="open-handoff-external" type="button" class="btn-secondary">Open externally</button>
   </div>
 
   <section id="task-pane" role="tabpanel" aria-labelledby="task-tab">
@@ -180,10 +186,29 @@
 
   <section id="history-pane" role="tabpanel" aria-labelledby="history-tab" hidden>
     <div class="history-actions">
+      <span id="history-project" class="history-project"></span>
       <button id="refresh-history" type="button" class="btn-secondary">↻ Refresh history</button>
     </div>
     <p id="history-status" class="status-msg" role="status" aria-live="polite"></p>
     <div id="history-list" class="history-list"></div>
+  </section>
+
+  <section id="settings-pane" role="tabpanel" aria-labelledby="settings-tab" hidden>
+    <h2 class="settings-title">Your API keys</h2>
+    <p class="settings-help">Your keys take priority over Baton's configured defaults. They are stored in VS Code SecretStorage and are never shown again. Remove a key to use the default.</p>
+    <form class="personal-key-form" data-provider="gemma">
+      <label for="gemma-key">Gemma (Google AI Studio)</label>
+      <span id="gemma-key-status" class="key-status">Checking…</span>
+      <input id="gemma-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Google AI Studio API key" required>
+      <div class="key-actions"><button type="submit" class="btn-primary">Save key</button><button type="button" class="btn-secondary remove-key" data-provider="gemma">Remove</button></div>
+    </form>
+    <form class="personal-key-form" data-provider="elevenlabs">
+      <label for="elevenlabs-key">ElevenLabs (voice input)</label>
+      <span id="elevenlabs-key-status" class="key-status">Checking…</span>
+      <input id="elevenlabs-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your ElevenLabs API key" required>
+      <div class="key-actions"><button type="submit" class="btn-primary">Save key</button><button type="button" class="btn-secondary remove-key" data-provider="elevenlabs">Remove</button></div>
+    </form>
+    <p id="settings-status" class="status-msg" role="status" aria-live="polite"></p>
   </section>
 
   <!-- Friendly Toast Notifications Container -->

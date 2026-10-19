@@ -13,7 +13,10 @@ export class McpSession implements vscode.Disposable {
 
   async start(): Promise<string> {
     if (this.client) return 'MCP server is already running.';
-    const { command, args, env, cwd } = serverOptions(this.context);
+    let options;
+    try { options = serverOptions(this.context); }
+    catch { return 'Open a local project folder before starting MCP.'; }
+    const { command, args, env, cwd } = options;
     const transport = new StdioClientTransport({ command, args, env: { ...getDefaultEnvironment(), ...env }, cwd: cwd.fsPath });
     const client = new Client({ name: 'baton-sidebar', version: '0.0.1' });
     let timer: ReturnType<typeof setTimeout> | undefined;

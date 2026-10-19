@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { getActivePlan, getProjectOverview, searchProjectContext } from './data';
+import { getActivePlan, getProjectHistory, getProjectOverview, searchProjectContext } from './data';
 
 const server = new McpServer({ name: 'baton', version: '0.0.1' });
 
@@ -36,10 +36,17 @@ registerTool('search_project_context', {
 });
 
 registerTool('get_active_plan', {
-  description: 'Read the latest task with planned status and return its saved plan.',
+  description: 'Read the latest planned task and saved plan for this project.',
   inputSchema: {},
 }, async () => {
   try { return result(await getActivePlan()); } catch (error) { return failure(error); }
+});
+
+registerTool('get_project_history', {
+  description: 'Read the 20 most recent Baton tasks for this project, including status, outcome, and plan summaries.',
+  inputSchema: {},
+}, async () => {
+  try { return result(await getProjectHistory()); } catch (error) { return failure(error); }
 });
 
 void server.connect(new StdioServerTransport()).catch((error: unknown) => {

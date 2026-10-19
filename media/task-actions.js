@@ -11,8 +11,8 @@ function initializeTaskActions(vscode) {
       && task.route?.risk_tier !== 'high' && !['running', 'done', 'blocked'].includes(task.status)) {
       options.push(['codex', 'Codex CLI — run task']);
     }
-    options.push(['chatgpt', installed.chatgpt ? 'Codex chat — open prompt' : 'ChatGPT — open prompt']);
-    options.push(['gemini', 'Gemini — open prompt']);
+    options.push(['chatgpt', 'ChatGPT — open in VS Code']);
+    options.push(['gemini', 'Gemini — open in VS Code']);
     if (installed.claude) options.push(['claude', 'Claude Code — open prompt']);
     if (installed.antigravity) options.push(['antigravity', 'Antigravity — open prompt']);
     return options;

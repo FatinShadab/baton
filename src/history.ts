@@ -8,17 +8,31 @@ export class TaskHistory {
 
   constructor(private readonly store: JsonStore, private readonly memory: MemoryStore) {}
 
-  async handle(message: HistoryMessage): Promise<HistoryReply> {
+  async handle(message: HistoryMessage, project?: { uri: string; name: string }): Promise<HistoryReply> {
     try {
+      if (message.type === 'importPlan') {
+        const tasks = await this.store.loadTasks();
+        if (!tasks?.some((task) => task.id === message.taskId && this.inProject(task, project?.uri))) {
+          return { type: 'historyError', message: 'This task is not in the current project. Refresh History.' };
+        }
+      }
       const notice = message.type === 'loadHistory' ? undefined
         : await this.save(message.taskId, { plan: message.plan });
       const tasks = await this.store.loadTasks();
       if (!tasks) return { type: 'historyError', message: notice ?? 'Could not load history. Please retry.' };
-      return { type: 'history', tasks: tasks.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-        notice, changed: message.type !== 'loadHistory' };
+      return { type: 'history', tasks: tasks.filter((task) => this.inProject(task, project?.uri))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        notice, changed: message.type !== 'loadHistory', projectName: project?.name };
     } catch {
       return { type: 'historyError', message: 'Could not load or save history. Please retry.' };
     }
+  }
+
+  private inProject(task: TaskRecord, workspaceUri?: string): boolean {
+    if (!task.workspaceUri || !workspaceUri) return false;
+    return process.platform === 'win32'
+      ? task.workspaceUri.toLowerCase() === workspaceUri.toLowerCase()
+      : task.workspaceUri === workspaceUri;
   }
 
   save(id: string, change: { plan: string } | { outcome: 'Passed' | 'Failed' | 'Partial'; changedFiles?: string[] }): Promise<string> {

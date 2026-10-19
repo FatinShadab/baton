@@ -16,6 +16,8 @@
   const savePlanBtn = document.getElementById('save-plan');
   const useClipboardBtn = document.getElementById('use-clipboard');
   const planStatus = document.getElementById('plan-status');
+  const handoffFallback = document.getElementById('handoff-fallback');
+  const openHandoffExternal = document.getElementById('open-handoff-external');
   const micBtn = document.getElementById('mic-btn');
   const demoBtn = document.getElementById('demo-btn');
   const demoModeChip = document.getElementById('demo-mode-chip');
@@ -29,6 +31,7 @@
   const overrideCard = document.getElementById('policy-override-note');
   const overrideText = document.getElementById('policy-override-text');
   const toastContainer = document.getElementById('toast-container');
+  const settingsStatus = document.getElementById('settings-status');
 
   const DEMO_TASK = 'Fix the failing test in the date parser';
 
@@ -37,8 +40,6 @@
   let parts = [];
   let limit = 6000;
   let currentTaskId = '';
-  let mediaRecorder = null;
-  let audioChunks = [];
   let pendingAutoRoute = false;
   let demoMode = false;
   const selected = new Set();
@@ -53,6 +54,11 @@
     vscode.postMessage({ type: 'mcpToggle' });
   });
   mcpCopyConfig.addEventListener('click', () => vscode.postMessage({ type: 'mcpCopyConfig' }));
+  openHandoffExternal.addEventListener('click', () => {
+    if (openHandoffExternal.dataset.target) {
+      vscode.postMessage({ type: 'openExternalHandoff', target: openHandoffExternal.dataset.target });
+    }
+  });
   vscode.postMessage({ type: 'mcpStatusRequest' });
 
   // ---------------------------------------------------------------------------
@@ -105,6 +111,24 @@
 
   // Expose globally for history.js and helper modules
   window.showBatonToast = showToast;
+
+  document.querySelectorAll('.personal-key-form').forEach((keyForm) => {
+    keyForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = keyForm.querySelector('input');
+      const value = input.value.trim();
+      if (!value) return;
+      vscode.postMessage({ type: 'savePersonalKey', provider: keyForm.dataset.provider, value });
+      input.value = '';
+      settingsStatus.textContent = 'Saving key…';
+    });
+  });
+  document.querySelectorAll('.remove-key').forEach((button) => {
+    button.addEventListener('click', () => {
+      vscode.postMessage({ type: 'clearPersonalKey', provider: button.dataset.provider });
+      settingsStatus.textContent = 'Removing key…';
+    });
+  });
 
   // ---------------------------------------------------------------------------
   // Status Stepper: Routed > Planned > Running > Done
@@ -194,6 +218,8 @@
   // Task Input & Preview
   // ---------------------------------------------------------------------------
   task.addEventListener('input', () => {
+    handoffFallback.hidden = true;
+    openHandoffExternal.dataset.target = '';
     demoMode = false;
     demoModeChip.hidden = true;
     vscode.setState({ task: task.value });
@@ -246,53 +272,10 @@
   // Voice Input
   // ---------------------------------------------------------------------------
   if (micBtn) {
-    micBtn.addEventListener('click', async () => {
-      if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-        micBtn.disabled = true;
-        micBtn.classList.remove('recording');
-        status.innerHTML = '<span class="spinner"></span> Processing speech…';
-        return;
-      }
-
-      if (!navigator?.mediaDevices?.getUserMedia) {
-        status.textContent = 'Opening browser for voice input…';
-        vscode.postMessage({ type: 'startVoiceFallback' });
-        return;
-      }
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioChunks = [];
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data && event.data.size > 0) audioChunks.push(event.data);
-        };
-        mediaRecorder.onstop = () => {
-          stream.getTracks().forEach((track) => track.stop());
-          micBtn.disabled = false;
-          micBtn.classList.remove('recording');
-          const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64 = typeof reader.result === 'string' ? reader.result.split(',')[1] : '';
-            if (base64) {
-              status.innerHTML = '<span class="spinner"></span> Transcribing voice…';
-              vscode.postMessage({ type: 'voiceAudio', audioBase64: base64, mime: blob.type });
-            } else {
-              status.textContent = 'Could not read audio data.';
-              showToast('Could not read voice audio.', 'error');
-            }
-          };
-          reader.readAsDataURL(blob);
-        };
-        mediaRecorder.start();
-        micBtn.classList.add('recording');
-        status.textContent = 'Listening… click mic again when done.';
-      } catch {
-        status.textContent = 'Webview mic restricted. Opening browser…';
-        vscode.postMessage({ type: 'startVoiceFallback' });
-      }
+    micBtn.addEventListener('click', () => {
+      micBtn.disabled = true;
+      status.innerHTML = '<span class="spinner"></span> Opening recorder in VS Code…';
+      vscode.postMessage({ type: 'startVoiceRecorder' });
     });
   }
 
@@ -325,9 +308,34 @@
   // Message Handling
   // ---------------------------------------------------------------------------
   window.addEventListener('message', ({ data }) => {
+    if (data?.type === 'personalKeysStatus') {
+      for (const provider of ['gemma', 'elevenlabs']) {
+        const configured = data.configured?.[provider] === true;
+        document.getElementById(`${provider}-key-status`).textContent = configured
+          ? 'Your key is active' : 'Using default if available';
+        document.querySelector(`.remove-key[data-provider="${provider}"]`).disabled = !configured;
+      }
+      settingsStatus.textContent = data.notice || '';
+      if (data.notice) showToast(data.notice, data.notice.startsWith('Could not') ? 'error' : 'success');
+      return;
+    }
     if (data?.type === 'handoffResult') {
       planStatus.textContent = data.notice || '';
       showToast(data.notice || 'Prompt ready.', 'info', 4000);
+      openHandoffExternal.dataset.target = data.externalTarget || '';
+      handoffFallback.hidden = !data.externalTarget;
+      return;
+    }
+    if (data?.type === 'handoffExternalResult') {
+      showToast(data.notice || 'Opened externally.', 'info', 3500);
+      return;
+    }
+    if (data?.type === 'voiceRecorderReady') {
+      status.textContent = 'Recorder opened in VS Code. Click Start Recording in that tab.';
+      return;
+    }
+    if (data?.type === 'voiceTranscribing') {
+      status.innerHTML = '<span class="spinner"></span> Transcribing speech…';
       return;
     }
     if (data?.type === 'mcpStatus') {
@@ -397,7 +405,7 @@
       }
       const msg = data.message || 'Voice transcription error.';
       status.textContent = msg;
-      showToast(msg, 'error');
+      showToast(msg, msg.includes('cancelled') ? 'info' : 'error');
       return;
     }
 

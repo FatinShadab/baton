@@ -4,7 +4,7 @@ export type PanelMessage =
   | { type: 'previewContext'; text: string; requestId: number; demo: boolean }
   | { type: 'routeTask'; text: string; requestId: number; sources: string[]; demo: boolean };
 export type HistoryMessage =
-  | { type: 'loadHistory' }
+  | { type: 'loadHistory'; demo?: boolean }
   | { type: 'importPlan'; taskId: string; plan: string };
 export type TaskAction = 'runCodex' | 'markDone' | 'showDiff' | 'runTests';
 export type TaskActionMessage = { type: TaskAction; taskId: string };
@@ -17,11 +17,12 @@ export function isTaskActionMessage(message: unknown): message is TaskActionMess
     && 'taskId' in message && typeof message.taskId === 'string' && message.taskId.length > 0;
 }
 export type HistoryReply =
-  | { type: 'history'; tasks: TaskRecord[]; notice?: string; changed: boolean }
+  | { type: 'history'; tasks: TaskRecord[]; notice?: string; changed: boolean; projectName?: string }
   | { type: 'historyError'; message: string };
 
 export type HandoffMessage =
   | { type: 'planExternal'; target: 'chatgpt' | 'gemini' | 'claude' | 'antigravity'; taskId: string }
+  | { type: 'openExternalHandoff'; target: 'chatgpt' | 'gemini' }
   | { type: 'handoffAvailabilityRequest' }
   | { type: 'savePlan'; taskId: string; plan: string }
   | { type: 'readClipboard' };
@@ -31,23 +32,24 @@ export type HandoffReply =
   | { type: 'planSaveError'; message: string };
 
 export type VoiceMessage =
-  | { type: 'voiceAudio'; audioBase64: string; mime: string }
-  | { type: 'startVoiceFallback' };
+  | { type: 'startVoiceRecorder' };
 export type VoiceReply =
+  | { type: 'voiceRecorderReady' }
+  | { type: 'voiceTranscribing' }
   | { type: 'voiceText'; text: string; autoRoute: boolean }
   | { type: 'voiceError'; message: string };
 
 export function isVoiceMessage(message: unknown): message is VoiceMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
-  if (message.type === 'startVoiceFallback') return true;
-  return message.type === 'voiceAudio' && 'audioBase64' in message && typeof message.audioBase64 === 'string'
-    && (!('mime' in message) || typeof message.mime === 'string');
+  return message.type === 'startVoiceRecorder';
 }
 
 export function isHandoffMessage(message: unknown): message is HandoffMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
   if (message.type === 'handoffAvailabilityRequest') return true;
   if (message.type === 'readClipboard') return true;
+  if (message.type === 'openExternalHandoff') return 'target' in message
+    && (message.target === 'chatgpt' || message.target === 'gemini');
   if (message.type === 'planExternal' && 'target' in message && 'taskId' in message
     && typeof message.taskId === 'string' && message.taskId.length > 0
     && (message.target === 'chatgpt' || message.target === 'gemini'
@@ -61,7 +63,7 @@ export function isHandoffMessage(message: unknown): message is HandoffMessage {
 
 export function isHistoryMessage(message: unknown): message is HistoryMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
-  if (message.type === 'loadHistory') return true;
+  if (message.type === 'loadHistory') return !('demo' in message) || typeof message.demo === 'boolean';
   if (!('taskId' in message) || typeof message.taskId !== 'string' || !message.taskId) return false;
   return message.type === 'importPlan' && 'plan' in message && typeof message.plan === 'string'
     && message.plan.trim().length > 0 && Buffer.byteLength(message.plan, 'utf8') <= 100 * 1024;

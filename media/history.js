@@ -1,9 +1,11 @@
 function initializeHistory(vscode, taskActions) {
-  const tabs = [document.getElementById('task-tab'), document.getElementById('history-tab')];
+  const tabs = [document.getElementById('task-tab'), document.getElementById('history-tab'), document.getElementById('settings-tab')];
   const pane = document.getElementById('history-pane');
   const list = document.getElementById('history-list');
   const status = document.getElementById('history-status');
+  const project = document.getElementById('history-project');
   const refresh = document.getElementById('refresh-history');
+  const demoChip = document.getElementById('demo-mode-chip');
   const expanded = new Set();
   const drafts = new Map();
   let busy = false;
@@ -25,6 +27,10 @@ function initializeHistory(vscode, taskActions) {
     vscode.postMessage(message);
   }
 
+  function loadHistory() {
+    send({ type: 'loadHistory', demo: !demoChip.hidden });
+  }
+
   function show(index) {
     tabs.forEach((tab, i) => {
       tab.setAttribute('aria-selected', String(i === index));
@@ -33,7 +39,9 @@ function initializeHistory(vscode, taskActions) {
     });
     if (index === 1) {
       vscode.postMessage({ type: 'handoffAvailabilityRequest' });
-      send({ type: 'loadHistory' });
+      loadHistory();
+    } else if (index === 2) {
+      vscode.postMessage({ type: 'personalKeysStatus' });
     }
   }
 
@@ -42,18 +50,20 @@ function initializeHistory(vscode, taskActions) {
     tab.addEventListener('keydown', (event) => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index;
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
       show(next);
       tabs[next].focus();
     });
   });
 
-  refresh.addEventListener('click', () => send({ type: 'loadHistory' }));
+  refresh.addEventListener('click', loadHistory);
 
   function render(tasks) {
     list.replaceChildren();
     if (!tasks.length) {
-      list.textContent = 'No tasks recorded yet. Route a coding task to begin.';
+      list.textContent = project.textContent
+        ? 'No tasks recorded for this project yet.' : 'Open a project to view its history.';
       return;
     }
     for (const task of tasks) {
@@ -152,6 +162,7 @@ function initializeHistory(vscode, taskActions) {
       taskActions.update();
       return;
     }
+    project.textContent = data.projectName ? `Project: ${data.projectName}` : '';
     render(data.tasks);
     if (data.notice) {
       status.textContent = data.notice;
