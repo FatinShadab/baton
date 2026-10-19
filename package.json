@@ -28,6 +28,14 @@
       {
         "command": "baton.copyMcpConfig",
         "title": "Baton: Copy MCP Config"
+      },
+      {
+        "command": "baton.kb.openSources",
+        "title": "Baton: Open Knowledge Base Sources"
+      },
+      {
+        "command": "baton.kb.openAvailability",
+        "title": "Baton: Open Knowledge Base Availability"
       }
     ],
     "viewsContainers": {

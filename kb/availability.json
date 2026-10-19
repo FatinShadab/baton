@@ -1,0 +1,4 @@
+{
+  "agents": ["codex", "antigravity", "copilot"],
+  "models": [{ "agent_id": "codex", "name": "TODO" }]
+}

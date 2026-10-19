@@ -1,0 +1,30 @@
+{
+  "_comment": "Unverified starters. Replace these with official docs you have checked yourself; Baton treats every entry here as a lead, not a fact.",
+  "allowed_domains": [
+    "developers.openai.com",
+    "help.openai.com",
+    "platform.openai.com",
+    "antigravity.google",
+    "ai.google.dev",
+    "code.visualstudio.com",
+    "docs.github.com",
+    "github.com"
+  ],
+  "sources": [
+    {
+      "agent_id": "codex",
+      "url": "https://help.openai.com/en/articles/11096431",
+      "note": "Starter link; confirm it documents Codex CLI/agent behavior."
+    },
+    {
+      "agent_id": "copilot",
+      "url": "https://code.visualstudio.com/docs/agents/run/agent-harnesses.md",
+      "note": "Starter link; confirm it documents VS Code agent harnesses."
+    },
+    {
+      "agent_id": "antigravity",
+      "url": "https://github.com/google-antigravity/antigravity-cli",
+      "note": "Starter link; confirm it documents the Antigravity CLI."
+    }
+  ]
+}

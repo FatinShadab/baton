@@ -16,6 +16,7 @@ import { codexAvailable } from './terminal';
 import { copyMcpConfig, registerMcpProvider, serverOptions } from './mcp/config';
 import { McpSession } from './mcp/session';
 import { ensureMcpAgentInstructions } from './mcp/agents';
+import { registerKbCommands } from './kb/store';
 
 export async function activate(context: vscode.ExtensionContext): Promise<{ store: JsonStore; memory: MemoryStore }> {
   await importDevelopmentKeys(context);
@@ -47,6 +48,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
     initializeRouter(context.secrets),
     vscode.commands.registerCommand('baton.setKeys', () => setKeys(context.secrets)),
     vscode.commands.registerCommand('baton.copyMcpConfig', () => copyMcpConfig(context)),
+    ...registerKbCommands(context),
     vscode.commands.registerCommand('baton.focus', async () => {
       try {
         await vscode.commands.executeCommand('baton.panel.focus');

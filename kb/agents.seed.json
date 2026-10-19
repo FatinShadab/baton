@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "updated_at": "2026-10-19T00:00:00.000Z",
+  "agents": [
+    {
+      "id": "codex",
+      "label": "Codex CLI",
+      "integration": {
+        "mode": "cli-terminal",
+        "supportsModelFlag": "unknown",
+        "supportsReasoningFlag": "unknown"
+      },
+      "strengths": [],
+      "limits": [],
+      "sources": [],
+      "last_verified": null
+    },
+    {
+      "id": "antigravity",
+      "label": "Antigravity",
+      "integration": {
+        "mode": "cli-terminal",
+        "supportsModelFlag": "unknown",
+        "supportsReasoningFlag": "unknown"
+      },
+      "strengths": [],
+      "limits": [],
+      "sources": [],
+      "last_verified": null
+    },
+    {
+      "id": "copilot",
+      "label": "GitHub Copilot",
+      "integration": {
+        "mode": "vscode-chat",
+        "supportsModelFlag": "unknown",
+        "supportsReasoningFlag": "unknown"
+      },
+      "strengths": [],
+      "limits": [],
+      "sources": [],
+      "last_verified": null
+    }
+  ],
+  "models": []
+}
