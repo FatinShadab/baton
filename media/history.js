@@ -1,5 +1,10 @@
 function initializeHistory(vscode, taskActions) {
-  const tabs = [document.getElementById('task-tab'), document.getElementById('history-tab'), document.getElementById('settings-tab')];
+  const tabs = [
+    document.getElementById('task-tab'),
+    document.getElementById('history-tab'),
+    document.getElementById('settings-tab'),
+    document.getElementById('mcp-tab')
+  ].filter(Boolean);
   const pane = document.getElementById('history-pane');
   const list = document.getElementById('history-list');
   const status = document.getElementById('history-status');
@@ -34,13 +39,16 @@ function initializeHistory(vscode, taskActions) {
     tabs.forEach((tab, i) => {
       tab.setAttribute('aria-selected', String(i === index));
       tab.tabIndex = i === index ? 0 : -1;
-      document.getElementById(tab.getAttribute('aria-controls')).hidden = i !== index;
+      const target = document.getElementById(tab.getAttribute('aria-controls'));
+      if (target) target.hidden = i !== index;
     });
     if (index === 1) {
       vscode.postMessage({ type: 'handoffAvailabilityRequest' });
       loadHistory();
     } else if (index === 2) {
       vscode.postMessage({ type: 'personalKeysStatus' });
+    } else if (index === 3) {
+      vscode.postMessage({ type: 'mcpStatusRequest' });
     }
   }
 

@@ -3,186 +3,335 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src {{cspSource}} https: data:; style-src {{cspSource}}; script-src 'nonce-{{nonce}}';">
   <link rel="stylesheet" href="{{styleUri}}">
   <title>Baton</title>
 </head>
 <body>
+  <!-- Top Navigation & Brand Header -->
   <header class="app-header">
-    <div class="header-main">
-      <h1 class="app-title">Baton</h1>
-      <div class="header-actions">
-        <button id="mcp-btn" type="button" class="action-btn" title="Start or stop the Baton MCP server">Start MCP</button>
-      </div>
+    <div class="header-brand">
+      <svg class="baton-brand-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m6 16 10-10a2.12 2.12 0 0 1 3 3L9 19a2.12 2.12 0 0 1-3-3Z"/>
+        <path d="m13 9 3 3M5 5v4M3 7h4"/>
+      </svg>
+      <span class="brand-title">Baton</span>
+      <span id="session-chip" class="session-chip" title="Active session">New session</span>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Baton navigation">
+      <button id="task-tab" type="button" role="tab" aria-selected="true" aria-controls="task-pane">Chat</button>
+      <button id="history-tab" type="button" role="tab" aria-selected="false" aria-controls="history-pane" tabindex="-1">History</button>
+      <button id="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-pane" tabindex="-1">Settings</button>
+      <button id="mcp-tab" type="button" role="tab" aria-selected="false" aria-controls="mcp-pane" tabindex="-1">MCP</button>
+    </div>
+
+    <div class="header-actions">
+      <button id="toggle-research-btn" type="button" class="header-btn" title="Toggle Resources and Media" aria-label="Toggle Resources and Media" aria-pressed="true">
+        <svg class="header-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <line x1="15" y1="3" x2="15" y2="21"/>
+        </svg>
+        <span class="header-btn-text">Resources</span>
+      </button>
+      <button id="new-session-header-btn" type="button" class="header-btn header-btn-primary" title="Start a fresh session">+ New</button>
     </div>
   </header>
 
-  <div id="mcp-connection" class="mcp-connection" hidden>
-    <span class="mcp-active-dot" aria-hidden="true"></span>
-    <div class="mcp-endpoint">
-      <span class="mcp-endpoint-label">MCP active · stdio endpoint</span>
-      <code id="mcp-endpoint-value"></code>
-    </div>
-    <div class="mcp-help">
-      <button type="button" class="mcp-hint-button" aria-label="How to connect to Baton MCP" aria-describedby="mcp-hint">?</button>
-      <div id="mcp-hint" class="mcp-hint" role="group" aria-label="MCP connection steps">
-        <strong>Connect an MCP client</strong>
-        <ol>
-          <li>Copy the Baton MCP configuration.</li>
-          <li>Paste it into your client's MCP server settings.</li>
-          <li>Reload the client and enable Baton's tools.</li>
-        </ol>
-        <button id="mcp-copy-config" type="button" class="btn-secondary">Copy config</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="tabs" role="tablist" aria-label="Baton views">
-    <button id="task-tab" type="button" role="tab" aria-selected="true" aria-controls="task-pane">Task</button>
-    <button id="history-tab" type="button" role="tab" aria-selected="false" aria-controls="history-pane" tabindex="-1">History</button>
-    <button id="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-pane" tabindex="-1">Settings</button>
-  </div>
-
+  <!-- External Handoff Fallback Banner -->
   <div id="handoff-fallback" class="handoff-fallback" hidden>
     <span>If sign-in fails in VS Code, use your regular browser.</span>
     <button id="open-handoff-external" type="button" class="btn-secondary">Open externally</button>
   </div>
 
-  <section id="task-pane" role="tabpanel" aria-labelledby="task-tab">
-    <div class="chat-watermark" aria-hidden="true">
-      <svg class="watermark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="m6 16 10-10a2.12 2.12 0 0 1 3 3L9 19a2.12 2.12 0 0 1-3-3Z"/>
-        <path d="m13 9 3 3M5 5v4M3 7h4"/>
-      </svg>
-      <span class="watermark-title">Baton</span>
-      <span class="watermark-tagline">Not every task needs<br><em>frontier models!</em></span>
-    </div>
+  <!-- CHAT PANE (Main Coding & Routing Window) -->
+  <section id="task-pane" class="tab-pane active" role="tabpanel" aria-labelledby="task-tab">
+    <div class="chat-layout">
+      <!-- Main Chat Workspace (Primary Column: Centered Stream, Watermark & Dock) -->
+      <div class="chat-workspace">
+        <!-- Center Background Watermark (Centered in Chat Workspace) -->
+        <div class="chat-watermark" aria-hidden="true">
+          <img src="{{watermarkUri}}" alt="" class="watermark-img" />
+        </div>
 
-    <details id="context-preview" class="context-card" hidden>
-        <summary>What will be shared</summary>
-        <p class="context-intro">The task above and the selected context below will be sent when you route.</p>
-        <div id="context-sources" class="context-sources-list"></div>
-        <p id="context-size" class="context-size-text"></p>
-        <pre id="context-text" class="context-code"></pre>
-        <button id="refresh-context" type="button" class="btn-secondary">Refresh context</button>
-    </details>
+        <!-- Chat Stream Scroll Container -->
+        <div class="chat-scroll-area">
+          <div id="chat-stream" class="chat-stream">
+            <!-- Hero Center State (Baton Logo & Greeting) -->
+            <div id="hero-state" class="hero-state">
+              <div class="mascot-wrap">
+                <svg class="baton-hero-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m6 16 10-10a2.12 2.12 0 0 1 3 3L9 19a2.12 2.12 0 0 1-3-3Z"/>
+                  <path d="m13 9 3 3M5 5v4M3 7h4"/>
+                </svg>
+              </div>
+              <h2 class="hero-headline">Hand off coding tasks to the right AI model or agent.</h2>
 
-    <section id="result" role="status" aria-live="polite" aria-atomic="true">
-      <p id="routing-status" class="status-msg"></p>
-      <article id="route-card" class="route-card" hidden>
-        <div class="card-header">
-          <div class="card-title-group">
-            <h2 class="card-title">Route Result</h2>
-            <div id="router-chip" class="router-chip" title="Routing fallback hierarchy: Gemma 4 (AI Studio) -> Ollama -> Rules">
-              <span class="router-chip-label">Router:</span>
-              <span class="chip-tier chip-gemma" data-tier="gemma">Gemma</span>
-              <span class="chip-sep">|</span>
-              <span class="chip-tier chip-ollama" data-tier="ollama">Ollama</span>
-              <span class="chip-sep">|</span>
-              <span class="chip-tier chip-rules" data-tier="rules">Rules</span>
+              <!-- Getting Started Onboarding Card -->
+              <div id="auto-mode-card" class="tip-card">
+                <div class="tip-header">
+                  <div class="tip-title-wrap">
+                    <span class="tip-icon">🪄</span>
+                    <strong class="tip-title">How Baton Works</strong>
+                  </div>
+                  <button id="tip-close-btn" type="button" class="tip-close" aria-label="Dismiss">&times;</button>
+                </div>
+                <div class="tip-body">
+                  <p class="guide-intro">Baton routes your coding requests through an intelligent model pipeline:</p>
+                  <div class="guide-steps">
+                    <div class="guide-step">
+                      <span class="guide-num">1</span>
+                      <div><strong>Describe your task:</strong> Type a prompt below or click the microphone button to dictate your instruction.</div>
+                    </div>
+                    <div class="guide-step">
+                      <span class="guide-num">2</span>
+                      <div><strong>Intelligent routing:</strong> Gemma 4 (Google AI Studio), Ollama Cloud, or local rules inspect the task and assign a safety risk tier.</div>
+                    </div>
+                    <div class="guide-step">
+                      <span class="guide-num">3</span>
+                      <div><strong>Handoff or run:</strong> Copy context-rich plans to ChatGPT or Gemini, or execute safe tasks directly in your terminal via Codex CLI.</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="suggestion-pills">
+                  <button type="button" class="pill-btn" data-prompt="Analyze the codebase architecture and explain key modules">Analyze codebase</button>
+                  <button type="button" class="pill-btn" data-prompt="Check for missing tests or edge cases in the active file">Find bugs & tests</button>
+                  <button type="button" class="pill-btn" data-prompt="Generate an implementation plan for adding new features">Generate plan</button>
+                </div>
+              </div>
             </div>
+
+            <!-- Threaded Chat Turns Container -->
+            <div id="chat-messages" class="chat-messages"></div>
+
+            <!-- Result Card Area (preserves existing IDs for routing updates) -->
+            <section id="result" role="status" aria-live="polite" aria-atomic="true">
+              <p id="routing-status" class="status-msg"></p>
+              <article id="route-card" class="route-card" hidden>
+                <div class="card-header">
+                  <div class="card-title-group">
+                    <h2 class="card-title">Route Result</h2>
+                    <div id="router-chip" class="router-chip" title="Routing fallback hierarchy: Gemma 4 (AI Studio) -> Ollama -> Rules">
+                      <span class="router-chip-label">Router:</span>
+                      <span class="chip-tier chip-gemma" data-tier="gemma">Gemma</span>
+                      <span class="chip-sep">|</span>
+                      <span class="chip-tier chip-ollama" data-tier="ollama">Ollama</span>
+                      <span class="chip-sep">|</span>
+                      <span class="chip-tier chip-rules" data-tier="rules">Rules</span>
+                    </div>
+                  </div>
+                  <span id="risk" class="risk"></span>
+                </div>
+                <p id="router-notice" class="router-notice" hidden></p>
+                <p id="router-tier" class="sr-only" aria-hidden="true"></p>
+
+                <!-- Stepper: Routed > Planned > Running > Done -->
+                <div class="stepper-wrap">
+                  <nav class="stepper" id="task-stepper" aria-label="Task progress">
+                    <div class="step" data-step="routed">
+                      <span class="step-num">1</span>
+                      <span class="step-name">Routed</span>
+                    </div>
+                    <span class="step-arrow" aria-hidden="true">›</span>
+                    <div class="step" data-step="planned">
+                      <span class="step-num">2</span>
+                      <span class="step-name">Planned</span>
+                    </div>
+                    <span class="step-arrow" aria-hidden="true">›</span>
+                    <div class="step" data-step="running">
+                      <span class="step-num">3</span>
+                      <span class="step-name">Running</span>
+                    </div>
+                    <span class="step-arrow" aria-hidden="true">›</span>
+                    <div class="step" data-step="done">
+                      <span class="step-num">4</span>
+                      <span class="step-name">Done</span>
+                    </div>
+                  </nav>
+                </div>
+
+                <!-- Policy Override Note -->
+                <div id="policy-override-note" class="policy-override-card" hidden>
+                  <div class="override-header">
+                    <span class="override-icon" aria-hidden="true">⚠️</span>
+                    <strong class="override-title">Policy overrode the model</strong>
+                  </div>
+                  <p id="policy-override-text" class="override-body">Risk raised to high by safety policy. Manual handling required; never auto-run.</p>
+                </div>
+
+                <dl class="route-grid">
+                  <div class="grid-item">
+                    <dt>Type</dt>
+                    <dd id="route-type"></dd>
+                  </div>
+                  <div class="grid-item">
+                    <dt>Destination</dt>
+                    <dd id="destination" class="dest-badge"></dd>
+                  </div>
+                  <div class="grid-item">
+                    <dt>Research</dt>
+                    <dd id="research"></dd>
+                  </div>
+                  <div class="grid-item">
+                    <dt>Policy Action</dt>
+                    <dd id="action" class="action-badge"></dd>
+                  </div>
+                </dl>
+
+                <div class="info-card reason-card">
+                  <span class="info-label">Reasoning</span>
+                  <p id="reason" class="info-content"></p>
+                </div>
+
+                <div class="info-card policy-card">
+                  <span class="info-label">Policy Gate</span>
+                  <p id="policy-why" class="info-content"></p>
+                </div>
+
+                <div id="plan-section" class="card-section" hidden>
+                  <div class="section-title">Implementation Plan</div>
+                  <label for="plan-text" class="field-label">Paste Plan</label>
+                  <textarea id="plan-text" rows="5" placeholder="Paste the implementation plan you received…"></textarea>
+                  <div class="plan-actions">
+                    <button id="use-clipboard" type="button" class="btn-secondary">📋 Paste clipboard</button>
+                    <button id="save-plan" type="button" class="btn-primary">💾 Save plan</button>
+                  </div>
+                  <p id="plan-status" class="status-msg" role="status" aria-live="polite"></p>
+                </div>
+
+                <div class="card-section">
+                  <div class="section-title">Run or Open</div>
+                  <div id="task-controls" class="task-controls"></div>
+                  <p id="task-status" class="status-msg" role="status" aria-live="polite"></p>
+                  <p id="task-outcome" class="outcome-msg"></p>
+                </div>
+              </article>
+            </section>
+
+            <!-- Collapsible Context Drawer (Inside Chat Stream) -->
+            <details id="context-preview" class="context-card" hidden>
+              <summary>What will be shared</summary>
+              <p class="context-intro">The task above and the selected context below will be sent when you route.</p>
+              <div id="context-sources" class="context-sources-list"></div>
+              <p id="context-size" class="context-size-text"></p>
+              <pre id="context-text" class="context-code"></pre>
+              <button id="refresh-context" type="button" class="btn-secondary">Refresh context</button>
+            </details>
           </div>
-          <span id="risk" class="risk"></span>
         </div>
-        <p id="router-notice" class="router-notice" hidden></p>
 
-        <p id="router-tier" class="sr-only" aria-hidden="true"></p>
-
-        <!-- Status Stepper: Routed > Planned > Running > Done -->
-        <div class="stepper-wrap">
-          <nav class="stepper" id="task-stepper" aria-label="Task progress">
-            <div class="step" data-step="routed">
-              <span class="step-num">1</span>
-              <span class="step-name">Routed</span>
+        <!-- Floating Prompt Dock (Centered directly under chat stream) -->
+        <div class="dock-container">
+          <form id="task-form" class="floating-prompt-dock">
+            <textarea id="task" rows="2" placeholder="Ask Baton to edit, route, or build... (Enter to route, Shift+Enter for newline)" required></textarea>
+            <div class="dock-footer">
+              <div class="dock-left">
+                <div id="router-indicator-pill" class="dock-pill" title="Active Router: Gemma 4 AI Studio with Ollama & Rules fallback">
+                  <span class="pill-dot"></span>
+                  <span id="dock-router-label">Gemma 4</span>
+                </div>
+              </div>
+              <div class="dock-right">
+                <button id="mic-btn" type="button" class="dock-mic-btn" data-tooltip="Speak task (ElevenLabs Voice Input)" aria-label="Speak task (ElevenLabs Voice Input)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                  </svg>
+                </button>
+                <button type="submit" id="submit-btn" class="dock-submit-btn" data-tooltip="Route task (Enter)" aria-label="Route task (Enter)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                  </svg>
+                </button>
+              </div>
             </div>
-            <span class="step-arrow" aria-hidden="true">›</span>
-            <div class="step" data-step="planned">
-              <span class="step-num">2</span>
-              <span class="step-name">Planned</span>
-            </div>
-            <span class="step-arrow" aria-hidden="true">›</span>
-            <div class="step" data-step="running">
-              <span class="step-num">3</span>
-              <span class="step-name">Running</span>
-            </div>
-            <span class="step-arrow" aria-hidden="true">›</span>
-            <div class="step" data-step="done">
-              <span class="step-num">4</span>
-              <span class="step-name">Done</span>
-            </div>
-          </nav>
-        </div>
-
-        <!-- Visible Policy Override Note -->
-        <div id="policy-override-note" class="policy-override-card" hidden>
-          <div class="override-header">
-            <span class="override-icon" aria-hidden="true">⚠️</span>
-            <strong class="override-title">Policy overrode the model</strong>
-          </div>
-          <p id="policy-override-text" class="override-body">Risk raised to high by safety policy. Manual handling required; never auto-run.</p>
-        </div>
-
-        <dl class="route-grid">
-          <div class="grid-item">
-            <dt>Type</dt>
-            <dd id="route-type"></dd>
-          </div>
-          <div class="grid-item">
-            <dt>Destination</dt>
-            <dd id="destination" class="dest-badge"></dd>
-          </div>
-          <div class="grid-item">
-            <dt>Research</dt>
-            <dd id="research"></dd>
-          </div>
-          <div class="grid-item">
-            <dt>Policy Action</dt>
-            <dd id="action" class="action-badge"></dd>
-          </div>
-        </dl>
-
-        <div class="info-card reason-card">
-          <span class="info-label">Reasoning</span>
-          <p id="reason" class="info-content"></p>
-        </div>
-
-        <div class="info-card policy-card">
-          <span class="info-label">Policy Gate</span>
-          <p id="policy-why" class="info-content"></p>
-        </div>
-
-        <div id="plan-section" class="card-section" hidden>
-          <div class="section-title">Implementation Plan</div>
-          <label for="plan-text" class="field-label">Paste Plan</label>
-          <textarea id="plan-text" rows="6" placeholder="Paste the implementation plan you received…"></textarea>
-          <div class="plan-actions">
-            <button id="use-clipboard" type="button" class="btn-secondary">📋 Paste clipboard</button>
-            <button id="save-plan" type="button" class="btn-primary">💾 Save plan</button>
-          </div>
-          <p id="plan-status" class="status-msg" role="status" aria-live="polite"></p>
-        </div>
-
-        <div class="card-section">
-          <div class="section-title">Run or Open</div>
-          <div id="task-controls" class="task-controls"></div>
-          <p id="task-status" class="status-msg" role="status" aria-live="polite"></p>
-          <p id="task-outcome" class="outcome-msg"></p>
-        </div>
-      </article>
-    </section>
-    <form id="task-form">
-      <div class="task-header">
-        <label for="task" class="field-label">Coding task</label>
-        <div class="task-header-actions">
-          <button id="mic-btn" type="button" class="action-btn mic-btn" title="Speak task" aria-label="Speak task">🎤</button>
+          </form>
         </div>
       </div>
-      <textarea id="task" rows="5" placeholder="What would you like to build?" required></textarea>
-      <button type="submit" id="submit-btn" class="btn-primary">Prepare context</button>
-    </form>
+
+      <!-- Right Side Resources and Media Rail (Secondary Column) -->
+      <aside id="research-sidebar" class="research-sidebar" aria-label="Resources and Media">
+        <div class="research-header">
+          <div class="research-title-group">
+            <svg class="research-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            <span class="research-title">Resources and Media</span>
+          </div>
+          <div class="research-header-right">
+            <span id="research-tier-badge" class="research-tier-badge">Standby</span>
+            <button id="close-research-btn" type="button" class="research-close-btn" title="Collapse Resources and Media" aria-label="Collapse Resources and Media">&times;</button>
+          </div>
+        </div>
+
+        <div class="research-scroll-body">
+          <div id="research-standby-card" class="research-standby-card">
+            <div class="standby-icon">💡</div>
+            <p id="research-status" class="research-status-text">Related YouTube tutorials, blogs, and documentation resources will appear here as you prompt Baton.</p>
+          </div>
+
+          <!-- Shimmer Skeleton Loading State -->
+          <div id="research-loading" class="research-loading" hidden>
+            <div class="shimmer-card">
+              <div class="shimmer-line title-line"></div>
+              <div class="shimmer-line text-line"></div>
+            </div>
+            <div class="shimmer-card">
+              <div class="shimmer-line title-line"></div>
+              <div class="shimmer-line text-line"></div>
+            </div>
+            <div class="shimmer-card">
+              <div class="shimmer-line title-line"></div>
+              <div class="shimmer-line text-line"></div>
+            </div>
+          </div>
+
+          <!-- YouTube Section -->
+          <div class="research-group" id="yt-group" hidden>
+            <div class="research-group-header">
+              <div class="group-title-wrap">
+                <span class="group-icon yt-icon">▶</span>
+                <span class="group-title">YouTube Videos</span>
+              </div>
+              <span class="group-badge">Top 3</span>
+            </div>
+            <div id="yt-cards-list" class="yt-cards-list"></div>
+          </div>
+
+          <!-- Blogs & Articles Section -->
+          <div class="research-group" id="blog-group" hidden>
+            <div class="research-group-header">
+              <div class="group-title-wrap">
+                <span class="group-icon blog-icon">📝</span>
+                <span class="group-title">Blogs & Guides</span>
+              </div>
+              <span class="group-badge">Top 3</span>
+            </div>
+            <div id="blog-tiles-list" class="tiles-list"></div>
+          </div>
+
+          <!-- Research Artifacts Section -->
+          <div class="research-group" id="artifact-group" hidden>
+            <div class="research-group-header">
+              <div class="group-title-wrap">
+                <span class="group-icon artifact-icon">📚</span>
+                <span class="group-title">Papers & Specs</span>
+              </div>
+              <span class="group-badge">Top 3</span>
+            </div>
+            <div id="artifact-tiles-list" class="tiles-list"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
   </section>
 
-  <section id="history-pane" role="tabpanel" aria-labelledby="history-tab" hidden>
+  <!-- HISTORY PANE -->
+  <section id="history-pane" class="tab-pane" role="tabpanel" aria-labelledby="history-tab" hidden>
     <div class="history-actions">
       <span id="history-project" class="history-project"></span>
       <button id="refresh-history" type="button" class="btn-secondary">↻ Refresh history</button>
@@ -191,22 +340,60 @@
     <div id="history-list" class="history-list"></div>
   </section>
 
-  <section id="settings-pane" role="tabpanel" aria-labelledby="settings-tab" hidden>
+  <!-- SETTINGS PANE -->
+  <section id="settings-pane" class="tab-pane" role="tabpanel" aria-labelledby="settings-tab" hidden>
     <h2 class="settings-title">Your API keys</h2>
-    <p class="settings-help">Your keys take priority over Baton's configured defaults. They are stored in VS Code SecretStorage and are never shown again. Remove a key to use the default.</p>
+    <p class="settings-help">Your keys take priority over Baton's configured defaults. Stored in VS Code SecretStorage and never exposed in plaintext. Remove a key to use the default.</p>
     <form class="personal-key-form" data-provider="gemma">
       <label for="gemma-key">Gemma (Google AI Studio)</label>
       <span id="gemma-key-status" class="key-status">Checking…</span>
       <input id="gemma-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Google AI Studio API key" required>
-      <div class="key-actions"><button type="submit" class="btn-primary">Save key</button><button type="button" class="btn-secondary remove-key" data-provider="gemma">Remove</button></div>
+      <div class="key-actions">
+        <button type="submit" class="btn-primary">Save key</button>
+        <button type="button" class="btn-secondary remove-key" data-provider="gemma">Remove</button>
+      </div>
     </form>
     <form class="personal-key-form" data-provider="elevenlabs">
       <label for="elevenlabs-key">ElevenLabs (voice input)</label>
       <span id="elevenlabs-key-status" class="key-status">Checking…</span>
       <input id="elevenlabs-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your ElevenLabs API key" required>
-      <div class="key-actions"><button type="submit" class="btn-primary">Save key</button><button type="button" class="btn-secondary remove-key" data-provider="elevenlabs">Remove</button></div>
+      <div class="key-actions">
+        <button type="submit" class="btn-primary">Save key</button>
+        <button type="button" class="btn-secondary remove-key" data-provider="elevenlabs">Remove</button>
+      </div>
     </form>
     <p id="settings-status" class="status-msg" role="status" aria-live="polite"></p>
+  </section>
+
+  <!-- MCP PANE -->
+  <section id="mcp-pane" class="tab-pane" role="tabpanel" aria-labelledby="mcp-tab" hidden>
+    <div class="mcp-page">
+      <div class="mcp-page-header">
+        <div class="mcp-header-info">
+          <h2 class="mcp-page-title">Model Context Protocol (MCP)</h2>
+          <p class="mcp-page-desc">Expose Baton's local context and memory tools to Cursor, Windsurf, or other MCP clients via stdio.</p>
+        </div>
+        <button id="mcp-btn" type="button" class="action-btn" title="Start or stop the Baton MCP server">Start MCP</button>
+      </div>
+
+      <div id="mcp-connection" class="mcp-connection" hidden>
+        <span class="mcp-active-dot" aria-hidden="true"></span>
+        <div class="mcp-endpoint">
+          <span class="mcp-endpoint-label">MCP active · stdio endpoint</span>
+          <code id="mcp-endpoint-value"></code>
+        </div>
+      </div>
+
+      <div class="mcp-instruction-card">
+        <h3 class="mcp-card-title">Connect an MCP client</h3>
+        <ol class="mcp-steps-list">
+          <li>Click <strong>Copy config</strong> to get the JSON configuration for your client.</li>
+          <li>Paste it into your client's MCP server configuration (e.g., <code>mcp_config.json</code>).</li>
+          <li>Restart your MCP client. Baton's local tools and task memory will be available.</li>
+        </ol>
+        <button id="mcp-copy-config" type="button" class="btn-secondary">Copy config</button>
+      </div>
+    </div>
   </section>
 
   <!-- Friendly Toast Notifications Container -->
@@ -214,6 +401,7 @@
 
   <script nonce="{{nonce}}" src="{{actionsUri}}"></script>
   <script nonce="{{nonce}}" src="{{historyUri}}"></script>
+  <script nonce="{{nonce}}" src="{{resourcesUri}}"></script>
   <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
 </body>
 </html>

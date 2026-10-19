@@ -21,7 +21,7 @@ export type HistoryReply =
   | { type: 'historyError'; message: string };
 
 export type HandoffMessage =
-  | { type: 'planExternal'; target: 'chatgpt' | 'gemini' | 'claude' | 'antigravity'; taskId: string }
+  | { type: 'planExternal'; target: 'chatgpt' | 'gemini' | 'antigravity'; taskId: string }
   | { type: 'openExternalHandoff'; target: 'chatgpt' | 'gemini' }
   | { type: 'handoffAvailabilityRequest' }
   | { type: 'savePlan'; taskId: string; plan: string }
@@ -53,7 +53,7 @@ export function isHandoffMessage(message: unknown): message is HandoffMessage {
   if (message.type === 'planExternal' && 'target' in message && 'taskId' in message
     && typeof message.taskId === 'string' && message.taskId.length > 0
     && (message.target === 'chatgpt' || message.target === 'gemini'
-      || message.target === 'claude' || message.target === 'antigravity')) return true;
+      || message.target === 'antigravity')) return true;
   if (message.type === 'savePlan' && 'taskId' in message && 'plan' in message
     && typeof message.taskId === 'string' && message.taskId.length > 0
     && typeof message.plan === 'string' && message.plan.trim().length > 0
@@ -68,6 +68,9 @@ export function isHistoryMessage(message: unknown): message is HistoryMessage {
   return message.type === 'importPlan' && 'plan' in message && typeof message.plan === 'string'
     && message.plan.trim().length > 0 && Buffer.byteLength(message.plan, 'utf8') <= 100 * 1024;
 }
+import type { TaskResourcesResult } from './resources/types';
+export type { TaskResourcesResult } from './resources/types';
+
 export type PolicyDecision = {
   route: Route;
   action: 'RUN' | 'CONFIRM' | 'MANUAL_ONLY' | 'BLOCK';
@@ -79,7 +82,9 @@ export type RouterResult = { route: Route; tier: RouterTier; notice?: string };
 export type ExtensionMessage =
   | { type: 'contextPreview'; requestId: number; parts: ContextPart[]; limit: number }
   | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean; notice?: string }
-  | { type: 'routeError'; requestId: number };
+  | { type: 'routeError'; requestId: number }
+  | { type: 'resourcesSearching'; taskId: string; query: string }
+  | { type: 'resourcesReady'; resources: TaskResourcesResult };
 
 export function isPanelMessage(message: unknown): message is PanelMessage {
   if (typeof message !== 'object' || message === null
@@ -117,4 +122,47 @@ export const TaskRecordSchema = z.object({
   approvals: z.array(z.object({ approvedAt: z.string().datetime(), workspaceUri: z.string() })).optional(),
 });
 export type TaskRecord = z.infer<typeof TaskRecordSchema>;
+
+export const SessionTurnSchema = z.object({
+  id: z.string().min(1),
+  role: z.enum(['user', 'assistant', 'system']),
+  content: z.string(),
+  createdAt: z.string(),
+  taskId: z.string().optional(),
+  route: RouteSchema.optional(),
+  decision: z.string().optional(),
+  routerTier: z.enum(['gemma', 'ollama', 'rules']).optional(),
+  plan: z.string().optional(),
+  status: z.enum(['routed', 'planned', 'running', 'done', 'blocked']).optional(),
+  outcome: z.string().optional(),
+});
+export type SessionTurn = z.infer<typeof SessionTurnSchema>;
+
+export const SessionRecordSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  workspaceUri: z.string().optional(),
+  taskIds: z.array(z.string()).optional(),
+  turns: z.array(SessionTurnSchema).optional(),
+});
+export type SessionRecord = z.infer<typeof SessionRecordSchema>;
+
+export type SessionViewMessage =
+  | { type: 'loadSessions' }
+  | { type: 'newSession' }
+  | { type: 'selectSession'; sessionId: string }
+  | { type: 'deleteSession'; sessionId: string };
+
+export function isSessionViewMessage(message: unknown): message is SessionViewMessage {
+  if (typeof message !== 'object' || message === null || !('type' in message)) return false;
+  if (message.type === 'loadSessions' || message.type === 'newSession') return true;
+  if ((message.type === 'selectSession' || message.type === 'deleteSession')
+    && 'sessionId' in message && typeof message.sessionId === 'string' && message.sessionId.length > 0) {
+    return true;
+  }
+  return false;
+}
+
 

@@ -1,20 +1,86 @@
 {
-  "_comment": "Unverified starters. Replace these with official docs you have checked yourself; Baton treats every entry here as a lead, not a fact.",
+  "_comment": "Verified official documentation and source repositories covering model catalogs, CLI/IDE configuration, and agent harnesses across all researched coding agents.",
   "allowed_domains": [
     "developers.openai.com",
     "help.openai.com",
     "platform.openai.com",
+    "openai.com",
+    "learn.chatgpt.com",
     "antigravity.google",
     "ai.google.dev",
+    "developers.googleblog.com",
+    "codelabs.developers.google.com",
     "code.visualstudio.com",
     "docs.github.com",
-    "github.com"
+    "github.github.com",
+    "github.com",
+    "code.claude.com",
+    "support.claude.com",
+    "cursor.com",
+    "docs.devin.ai",
+    "docs.windsurf.com",
+    "opencode.ai"
   ],
   "sources": [
     {
       "agent_id": "codex",
+      "url": "https://github.com/openai/codex/blob/main/codex-rs/models-manager/models.json",
+      "note": "Canonical bundled model catalog for the open-source Rust Codex CLI and app-server."
+    },
+    {
+      "agent_id": "codex",
+      "url": "https://learn.chatgpt.com/docs/codex/cli",
+      "note": "Official Codex CLI documentation covering /model switching, effort levels, and config.toml setup."
+    },
+    {
+      "agent_id": "codex",
+      "url": "https://developers.openai.com/blog/codex-as-a-platform",
+      "note": "Official architectural documentation on the Codex open agent harness, App-Server, and SDK."
+    },
+    {
+      "agent_id": "codex",
+      "url": "https://openai.com/index/unrolling-the-codex-agent-loop/",
+      "note": "Deep dive into the Codex agent loop, Responses API integration, and AGENTS.md context hierarchy."
+    },
+    {
+      "agent_id": "codex",
       "url": "https://help.openai.com/en/articles/11096431",
-      "note": "Starter link; confirm it documents Codex CLI/agent behavior."
+      "note": "Starter link; confirm it documents Codex CLI and cloud agent behavior."
+    },
+    {
+      "agent_id": "antigravity",
+      "url": "https://antigravity.google/docs/models/",
+      "note": "Official Google Antigravity documentation detailing available Gemini, Claude, and GPT-OSS models and tier quotas."
+    },
+    {
+      "agent_id": "antigravity",
+      "url": "https://ai.google.dev/gemini-api/docs/antigravity-agent",
+      "note": "Official Gemini API documentation for the managed Antigravity agent and Shared Agent Harness."
+    },
+    {
+      "agent_id": "antigravity",
+      "url": "https://github.com/google-antigravity/antigravity-cli",
+      "note": "Official repository and documentation for the Antigravity terminal client (agy CLI)."
+    },
+    {
+      "agent_id": "antigravity",
+      "url": "https://codelabs.developers.google.com/getting-started-google-antigravity",
+      "note": "Official Google Codelab covering Antigravity 2.0 surfaces, Artifacts, Skills, and sub-agent orchestration."
+    },
+    {
+      "agent_id": "copilot",
+      "url": "https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/changing-the-ai-model",
+      "note": "Official GitHub documentation listing all supported models in the Copilot dropdown and Cloud Agent."
+    },
+    {
+      "agent_id": "copilot",
+      "url": "https://docs.github.com/en/copilot/concepts/models/auto-model-selection",
+      "note": "Official documentation on Copilot Auto model routing, optimization modes, and student/free tier behavior."
+    },
+    {
+      "agent_id": "copilot",
+      "url": "https://docs.github.com/en/copilot/how-tos/github-copilot-app/use-byok-models",
+      "note": "Official documentation on configuring Bring-Your-Own-Key (BYOK) models in GitHub Copilot."
     },
     {
       "agent_id": "copilot",
@@ -22,9 +88,44 @@
       "note": "Starter link; confirm it documents VS Code agent harnesses."
     },
     {
-      "agent_id": "antigravity",
-      "url": "https://github.com/google-antigravity/antigravity-cli",
-      "note": "Starter link; confirm it documents the Antigravity CLI."
+      "agent_id": "claude_code",
+      "url": "https://code.claude.com/docs/en/model-config",
+      "note": "Official Claude Code documentation on /model configuration, model aliases (opusplan, best, fable), and ANTHROPIC_MODEL settings."
+    },
+    {
+      "agent_id": "claude_code",
+      "url": "https://code.claude.com/docs/en/overview",
+      "note": "Official Claude Code overview covering CLI workflows, CLAUDE.md/AGENTS.md support, MCP, and parallel sub-agents."
+    },
+    {
+      "agent_id": "claude_code",
+      "url": "https://support.claude.com/en/articles/11940350-claude-code-model-configuration",
+      "note": "Anthropic support documentation detailing model selection and plan tier defaults in Claude Code."
+    },
+    {
+      "agent_id": "cursor",
+      "url": "https://cursor.com/docs/models-and-pricing",
+      "note": "Official Cursor documentation detailing the model catalog, The X Subscription usage pools, and API credit billing."
+    },
+    {
+      "agent_id": "windsurf",
+      "url": "https://docs.devin.ai/windsurf/plugins/cascade/models",
+      "note": "Official Cognition/Windsurf documentation listing Cascade models (SWE-2, SWE-1.6, Fusion, Claude, GPT, Gemini) and token pricing."
+    },
+    {
+      "agent_id": "windsurf",
+      "url": "https://docs.devin.ai/windsurf/plugins/cascade/cascade-overview",
+      "note": "Official documentation covering Windsurf Cascade Write/Chat modes, tool call limits, and auto-execution levels."
+    },
+    {
+      "agent_id": "opencode",
+      "url": "https://opencode.ai/v2/docs/models/",
+      "note": "Official OpenCode v2 documentation covering the /models selector, opencode.jsonc configuration, and local Ollama/LM Studio discovery."
+    },
+    {
+      "agent_id": "opencode",
+      "url": "https://opencode.ai/docs/models/",
+      "note": "Official OpenCode documentation on Models.dev registry integration and 75+ LLM provider configurations."
     }
   ]
 }

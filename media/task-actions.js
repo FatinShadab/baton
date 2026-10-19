@@ -13,7 +13,6 @@ function initializeTaskActions(vscode) {
     }
     options.push(['chatgpt', 'ChatGPT — open in VS Code']);
     options.push(['gemini', 'Gemini — open in VS Code']);
-    if (installed.claude) options.push(['claude', 'Claude Code — open prompt']);
     if (installed.antigravity) options.push(['antigravity', 'Antigravity — open prompt']);
     return options;
   }

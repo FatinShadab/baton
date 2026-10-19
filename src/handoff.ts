@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { openIntegratedBrowser } from './browser';
 
-export type HandoffTarget = 'chatgpt' | 'gemini' | 'claude' | 'antigravity';
+export type HandoffTarget = 'chatgpt' | 'gemini' | 'antigravity';
 export type BrowserHandoffTarget = 'chatgpt' | 'gemini';
 export type HandoffOutcome = { notice: string; externalTarget?: BrowserHandoffTarget };
 
@@ -11,13 +11,11 @@ const TARGETS: Record<BrowserHandoffTarget, string> = {
 };
 
 const EXTENSIONS = {
-  claude: 'anthropic.claude-code',
   antigravity: 'google.google-antigravity',
 } as const;
 
 export function handoffAvailability(): Record<keyof typeof EXTENSIONS, boolean> {
   return {
-    claude: Boolean(vscode.extensions.getExtension(EXTENSIONS.claude)),
     antigravity: Boolean(vscode.extensions.getExtension(EXTENSIONS.antigravity)),
   };
 }
@@ -61,17 +59,13 @@ export async function planExternal(
 
   const installed = handoffAvailability();
   try {
-    if (target === 'claude' && installed.claude) {
-      await vscode.commands.executeCommand('claude-vscode.editor.open', undefined, prompt);
-      return { notice: 'Prompt added to Claude Code. Review it before sending.' };
-    }
     if (!copied) return { notice: 'Baton could not copy the prompt to the clipboard.' };
     if (target === 'antigravity' && installed.antigravity) {
       await vscode.commands.executeCommand('antigravity.panel.focus');
       return { notice: 'Antigravity opened. Paste the copied prompt into its chat.' };
     }
-    if (target === 'claude' || target === 'antigravity') {
-      return { notice: `${target === 'claude' ? 'Claude Code' : 'Antigravity'} is not installed. Prompt copied for manual use.` };
+    if (target === 'antigravity') {
+      return { notice: 'Antigravity is not installed. Prompt copied for manual use.' };
     }
     await openIntegratedBrowser(TARGETS[target]);
     return { notice: 'Opened in VS Code. Sign in if needed, then paste the copied prompt.', externalTarget: target };

@@ -2,6 +2,7 @@
   const vscode = acquireVsCodeApi();
   const taskActions = initializeTaskActions(vscode);
   initializeHistory(vscode, taskActions);
+  const resourcesManager = typeof initializeResources === 'function' ? initializeResources(vscode) : undefined;
 
   const form = document.getElementById('task-form');
   const task = document.getElementById('task');
@@ -31,6 +32,36 @@
   const toastContainer = document.getElementById('toast-container');
   const settingsStatus = document.getElementById('settings-status');
 
+  const newSessionHeaderBtn = document.getElementById('new-session-header-btn');
+  const tipCloseBtn = document.getElementById('tip-close-btn');
+  const autoModeCard = document.getElementById('auto-mode-card');
+  const toggleContextBtn = document.getElementById('toggle-context-btn');
+  const sessionChip = document.getElementById('session-chip');
+  const heroState = document.getElementById('hero-state');
+  const chatMessages = document.getElementById('chat-messages');
+  const dockRouterLabel = document.getElementById('dock-router-label');
+  const toggleResearchBtn = document.getElementById('toggle-research-btn');
+  const closeResearchBtn = document.getElementById('close-research-btn');
+  const researchSidebar = document.getElementById('research-sidebar');
+
+  function setSidebarCollapsed(collapsed) {
+    if (!researchSidebar) return;
+    researchSidebar.classList.toggle('collapsed', collapsed);
+    if (toggleResearchBtn) {
+      toggleResearchBtn.classList.toggle('active', !collapsed);
+      toggleResearchBtn.setAttribute('aria-pressed', String(!collapsed));
+    }
+  }
+
+  toggleResearchBtn?.addEventListener('click', () => {
+    const isCollapsed = researchSidebar?.classList.contains('collapsed');
+    setSidebarCollapsed(!isCollapsed);
+  });
+
+  closeResearchBtn?.addEventListener('click', () => {
+    setSidebarCollapsed(true);
+  });
+
   let requestId = 0;
   let ready = false;
   let parts = [];
@@ -40,13 +71,83 @@
   const selected = new Set();
   const tiers = { gemma: 'via Gemma (AI Studio)', ollama: 'via Ollama', rules: 'via rules' };
 
+  const SEND_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>';
+  const SPINNER_ICON_SVG = '<svg class="dock-btn-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M12 3a9 9 0 0 1 9 9"></path></svg>';
+
+  function setSubmitButtonState(state = 'route', busy = false) {
+    if (!submit) return;
+    submit.innerHTML = busy ? SPINNER_ICON_SVG : SEND_ICON_SVG;
+    const isRoute = state === 'route';
+    let tooltip = isRoute ? 'Route task (Enter)' : 'Prepare context (Enter)';
+    if (busy) {
+      tooltip = isRoute ? 'Routing task…' : 'Preparing context…';
+    }
+    submit.setAttribute('data-tooltip', tooltip);
+    submit.setAttribute('aria-label', tooltip);
+    submit.removeAttribute('title');
+  }
+
+  setSubmitButtonState('route', false);
+
   task.value = vscode.getState()?.task ?? '';
+
+  function autoResize() {
+    task.style.height = 'auto';
+    task.style.height = `${Math.min(Math.max(task.scrollHeight, 38), 160)}px`;
+  }
+  task.addEventListener('input', autoResize);
+  autoResize();
+
+  task.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
+  });
+
+  if (tipCloseBtn && autoModeCard) {
+    tipCloseBtn.addEventListener('click', () => {
+      autoModeCard.style.display = 'none';
+    });
+  }
+
+  document.querySelectorAll('.pill-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      task.value = btn.dataset.prompt || '';
+      autoResize();
+      task.focus();
+    });
+  });
+
+  if (newSessionHeaderBtn) {
+    newSessionHeaderBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'newSession' });
+    });
+  }
+
+  if (toggleContextBtn) {
+    toggleContextBtn.addEventListener('click', () => {
+      if (preview.hidden) {
+        if (!ready) {
+          prepareContext();
+        } else {
+          preview.hidden = false;
+          preview.open = true;
+        }
+      } else {
+        preview.hidden = true;
+      }
+    });
+  }
+
   mcpBtn.addEventListener('click', () => {
     mcpBtn.disabled = true;
     mcpBtn.textContent = 'Working…';
     vscode.postMessage({ type: 'mcpToggle' });
   });
-  mcpCopyConfig.addEventListener('click', () => vscode.postMessage({ type: 'mcpCopyConfig' }));
+  if (mcpCopyConfig) {
+    mcpCopyConfig.addEventListener('click', () => vscode.postMessage({ type: 'mcpCopyConfig' }));
+  }
   openHandoffExternal.addEventListener('click', () => {
     if (openHandoffExternal.dataset.target) {
       vscode.postMessage({ type: 'openExternalHandoff', target: openHandoffExternal.dataset.target });
@@ -198,7 +299,7 @@
     preview.hidden = true;
     submit.disabled = false;
     refresh.disabled = false;
-    submit.textContent = 'Prepare context';
+    setSubmitButtonState('prepare', false);
     status.textContent = '';
     currentTaskId = '';
     controls.replaceChildren();
@@ -229,7 +330,7 @@
     refresh.disabled = true;
     card.hidden = true;
     if (overrideCard) overrideCard.hidden = true;
-    submit.innerHTML = '<span class="spinner"></span> Preparing context…';
+    setSubmitButtonState('prepare', true);
     status.innerHTML = '<span class="spinner"></span> Preparing local context…';
     vscode.postMessage({ type: 'previewContext', text: task.value, requestId: ++requestId });
   }
@@ -240,8 +341,12 @@
   // Voice Input
   // ---------------------------------------------------------------------------
   if (micBtn) {
+    micBtn.removeAttribute('title');
     micBtn.addEventListener('click', () => {
       micBtn.disabled = true;
+      micBtn.classList.add('recording');
+      micBtn.setAttribute('data-tooltip', 'Recording speech…');
+      micBtn.setAttribute('aria-label', 'Recording speech…');
       status.innerHTML = '<span class="spinner"></span> Opening recorder in VS Code…';
       vscode.postMessage({ type: 'startVoiceRecorder' });
     });
@@ -252,12 +357,29 @@
   // ---------------------------------------------------------------------------
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    if (!task.value.trim() || submit.disabled) {
-      if (!task.value.trim()) {
+    const promptText = task.value.trim();
+    if (!promptText || submit.disabled) {
+      if (!promptText) {
         showToast('Please enter a coding task before routing.', 'warning');
       }
       return;
     }
+
+    if (chatMessages && promptText) {
+      const userTurn = document.createElement('div');
+      userTurn.className = 'user-message-turn';
+      const bubble = document.createElement('div');
+      bubble.className = 'user-message-bubble';
+      bubble.textContent = promptText;
+      const meta = document.createElement('div');
+      meta.className = 'user-turn-meta';
+      meta.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      userTurn.append(bubble, meta);
+      chatMessages.appendChild(userTurn);
+      if (heroState) heroState.style.display = 'none';
+      userTurn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+
     if (!ready) {
       prepareContext();
       return;
@@ -267,15 +389,61 @@
     sourceList.querySelectorAll('input').forEach((input) => { input.disabled = true; });
     card.hidden = true;
     if (overrideCard) overrideCard.hidden = true;
-    submit.innerHTML = '<span class="spinner"></span> Routing task…';
+    setSubmitButtonState('route', true);
     status.innerHTML = '<span class="spinner"></span> Routing task via Gemma…';
-    vscode.postMessage({ type: 'routeTask', text: task.value, requestId, sources: [...selected] });
+    resourcesManager?.setSearching(promptText);
+    vscode.postMessage({ type: 'routeTask', text: promptText, requestId, sources: [...selected] });
   });
 
   // ---------------------------------------------------------------------------
   // Message Handling
   // ---------------------------------------------------------------------------
   window.addEventListener('message', ({ data }) => {
+    if (data?.type === 'resourcesSearching') {
+      resourcesManager?.setSearching(data.query);
+      return;
+    }
+    if (data?.type === 'resourcesReady') {
+      setSidebarCollapsed(false);
+      resourcesManager?.renderResources(data.resources);
+      return;
+    }
+    if (data?.type === 'activeSession') {
+      const session = data.session;
+      if (sessionChip) {
+        sessionChip.textContent = session?.title || 'New session';
+      }
+      if (chatMessages) {
+        chatMessages.replaceChildren();
+      }
+      card.hidden = true;
+      if (session?.title && session.title !== 'New session') {
+        if (heroState) heroState.style.display = 'none';
+      } else {
+        if (heroState) heroState.style.display = 'flex';
+        resourcesManager?.renderResources({
+          tier: 'keyword',
+          videos: [],
+          blogs: [],
+          artifacts: [],
+          notice: 'Related YouTube tutorials, blogs, and documentation resources will appear here as you prompt Baton.',
+        });
+      }
+      if (session?.turns && session.turns.length > 0) {
+        session.turns.forEach((turn) => {
+          if (turn.role === 'user') {
+            const userTurn = document.createElement('div');
+            userTurn.className = 'user-message-turn';
+            const bubble = document.createElement('div');
+            bubble.className = 'user-message-bubble';
+            bubble.textContent = turn.content;
+            userTurn.append(bubble);
+            chatMessages.appendChild(userTurn);
+          }
+        });
+      }
+      return;
+    }
     if (data?.type === 'personalKeysStatus') {
       for (const provider of ['gemma', 'elevenlabs']) {
         const configured = data.configured?.[provider] === true;
@@ -333,7 +501,7 @@
       if (data.changed) {
         ready = false;
         preview.hidden = true;
-        submit.textContent = 'Prepare context';
+        setSubmitButtonState('prepare', false);
       }
       return;
     }
@@ -342,6 +510,9 @@
       if (micBtn) {
         micBtn.disabled = false;
         micBtn.classList.remove('recording');
+        micBtn.setAttribute('data-tooltip', 'Speak task (ElevenLabs Voice Input)');
+        micBtn.setAttribute('aria-label', 'Speak task (ElevenLabs Voice Input)');
+        micBtn.removeAttribute('title');
       }
       const spoken = (data.text || '').trim();
       if (spoken) {
@@ -365,6 +536,9 @@
       if (micBtn) {
         micBtn.disabled = false;
         micBtn.classList.remove('recording');
+        micBtn.setAttribute('data-tooltip', 'Speak task (ElevenLabs Voice Input)');
+        micBtn.setAttribute('aria-label', 'Speak task (ElevenLabs Voice Input)');
+        micBtn.removeAttribute('title');
       }
       const msg = data.message || 'Voice transcription error.';
       status.textContent = msg;
@@ -392,7 +566,7 @@
       updateStepper('planned', true);
       ready = false;
       preview.hidden = true;
-      submit.textContent = 'Prepare context';
+      setSubmitButtonState('prepare', false);
       return;
     }
 
@@ -432,7 +606,7 @@
       ready = true;
       submit.disabled = false;
       refresh.disabled = false;
-      submit.textContent = 'Route task';
+      setSubmitButtonState('route', false);
       preview.hidden = false;
       preview.open = true;
       status.textContent = 'Review the sources, then route your task.';
@@ -449,7 +623,7 @@
 
     if (data?.type === 'routeError') {
       submit.disabled = false;
-      submit.textContent = ready ? 'Route task' : 'Prepare context';
+      setSubmitButtonState(ready ? 'route' : 'prepare', false);
       status.textContent = 'Could not prepare or route this task. Please try again.';
       showToast('Could not route this task. Check connection or try again.', 'error');
       return;
@@ -460,7 +634,7 @@
     currentTaskId = data.taskId || '';
     vscode.postMessage({ type: 'handoffAvailabilityRequest' });
     submit.disabled = false;
-    submit.textContent = 'Route task';
+    setSubmitButtonState('route', false);
     status.textContent = (data.saved ? 'Saved to memory. Choose a destination below.'
       : 'Route ready, but local memory could not be saved.') + (data.notice ? ` ${data.notice}` : '');
 

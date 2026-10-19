@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { TaskRecord, TaskRecordSchema } from './types';
+import { SessionRecord, SessionRecordSchema, TaskRecord, TaskRecordSchema } from './types';
 
 const TasksSchema = z.array(TaskRecordSchema);
+const SessionsSchema = z.array(SessionRecordSchema);
 
 /** Use one instance per activation to serialize local memory operations. */
 export class JsonStore {
@@ -90,5 +92,54 @@ export class JsonStore {
       await this.writeFile('tasks.json', TasksSchema, tasks);
       return tasks[index];
     });
+  }
+
+  loadSessions(): Promise<SessionRecord[] | undefined> {
+    return this.read('sessions.json', SessionsSchema, []);
+  }
+
+  saveSessions(sessions: SessionRecord[]): Promise<boolean> {
+    return this.write('sessions.json', SessionsSchema, sessions);
+  }
+
+  async getSession(id: string): Promise<SessionRecord | undefined> {
+    const sessions = await this.loadSessions();
+    return sessions?.find((session) => session.id === id);
+  }
+
+  async createSession(title?: string, workspaceUri?: string): Promise<SessionRecord> {
+    const session: SessionRecord = {
+      id: randomUUID(),
+      title: title || 'New session',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      workspaceUri,
+      taskIds: [],
+      turns: [],
+    };
+    await this.append('sessions.json', SessionRecordSchema, session);
+    return session;
+  }
+
+  updateSession(id: string, update: (session: SessionRecord) => SessionRecord): Promise<SessionRecord | undefined> {
+    return this.enqueue(async () => {
+      const sessions = await this.readFile('sessions.json', SessionsSchema, []);
+      const index = sessions.findIndex((session) => session.id === id);
+      if (index < 0) return undefined;
+      sessions[index] = SessionRecordSchema.parse(update(sessions[index]));
+      sessions[index].updatedAt = new Date().toISOString();
+      await this.writeFile('sessions.json', SessionsSchema, sessions);
+      return sessions[index];
+    });
+  }
+
+  deleteSession(id: string): Promise<boolean> {
+    return this.enqueue(async () => {
+      const sessions = await this.readFile('sessions.json', SessionsSchema, []);
+      const filtered = sessions.filter((session) => session.id !== id);
+      if (filtered.length === sessions.length) return false;
+      await this.writeFile('sessions.json', SessionsSchema, filtered);
+      return true;
+    }).then((res) => res ?? false);
   }
 }

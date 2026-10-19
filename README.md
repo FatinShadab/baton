@@ -1,17 +1,19 @@
 # Baton
 
-Baton is a VS Code extension for turning a coding request into a reviewed, context-aware handoff. Describe a task in the sidebar, choose what project context to share, and see a structured route with a task type, risk tier, destination, and reason. Baton keeps plans and outcomes in local extension storage so later tasks can use relevant project history.
+Baton is a VS Code extension for turning a coding request into a reviewed, context-aware handoff. Inspired by the clean, focused Claude Code interface, Baton features a dual-surface architecture: a **Session Manager** in the Activity Bar sidebar to navigate past coding sessions, and a full-featured **Main Coding Panel** in the editor area with a warm charcoal aesthetic, floating prompt dock, and integrated tabs for Chat, History, Settings, and MCP.
 
 The router tries Gemma 4 through Google AI Studio, then Gemma through Ollama Cloud, then local rules. A separate, deterministic policy gate can raise the route's risk level but cannot lower it. Execution always remains a deliberate user action.
 
 ## Features
 
+- **Dual-surface UI:** A dedicated **Session Manager** in the VS Code sidebar (`+ New session`, filterable past sessions) and an expansive **Main Coding Panel** in the editor area.
+- **Claude Code aesthetic:** Warm charcoal & terracotta palette, retro 8-bit mascot hero state, and pinned floating prompt dock.
 - **Reviewable context:** Preview the README summary, Git change summary, active editor excerpt, and relevant saved memories. Remove sources before routing.
 - **Visible routing:** See whether Gemma, Ollama, or rules answered, along with the selected destination, risk, and policy action.
 - **Planning handoffs:** Prepare a prompt for ChatGPT, Gemini, and supported installed VS Code coding assistants. Paste the resulting plan back into Baton to save it.
 - **Terminal execution:** Run an approved task with `codex exec` in a VS Code terminal, inspect the diff, and record the outcome.
-- **Read-only MCP tools:** Expose project overview, saved context, and the active plan to compatible MCP clients.
-- **Voice input:** Transcribe a spoken task when an ElevenLabs API key is configured.
+- **Integrated MCP tools:** Toggle Baton's local MCP server, copy client configurations, and inspect status directly in the main panel.
+- **Voice input:** Transcribe a spoken task via ElevenLabs using the top header microphone button.
 
 ## Requirements and setup
 
