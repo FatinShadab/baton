@@ -1,21 +1,15 @@
 (() => {
   const vscode = acquireVsCodeApi();
   const taskActions = initializeTaskActions(vscode);
-  initializeHistory(vscode, taskActions);
   const resourcesManager = typeof initializeResources === 'function' ? initializeResources(vscode) : undefined;
 
   const form = document.getElementById('task-form');
   const task = document.getElementById('task');
   const submit = form?.querySelector('button[type="submit"]');
   const micBtn = document.getElementById('mic-btn');
-  const mcpBtn = document.getElementById('mcp-btn');
-  const mcpConnection = document.getElementById('mcp-connection');
-  const mcpEndpoint = document.getElementById('mcp-endpoint-value');
-  const mcpCopyConfig = document.getElementById('mcp-copy-config');
   const handoffFallback = document.getElementById('handoff-fallback');
   const openHandoffExternal = document.getElementById('open-handoff-external');
   const toastContainer = document.getElementById('toast-container');
-  const settingsStatus = document.getElementById('settings-status');
 
   const newSessionHeaderBtn = document.getElementById('new-session-header-btn');
   const tipCloseBtn = document.getElementById('tip-close-btn');
@@ -59,7 +53,7 @@
   let hasProject = true;
   let activePlanTextarea = null;
   const selected = new Set();
-  const tiers = { gemma: 'via Gemma (AI Studio)', ollama: 'via Ollama', rules: 'via rules' };
+  const tiers = { gemma: 'via Google AI Studio', ollama: 'via Ollama Cloud', rules: 'via rules' };
 
   const SEND_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>';
   const SPINNER_ICON_SVG = '<svg class="dock-btn-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M12 3a9 9 0 0 1 9 9"></path></svg>';
@@ -145,23 +139,11 @@
     });
   }
 
-  mcpBtn?.addEventListener('click', () => {
-    mcpBtn.disabled = true;
-    mcpBtn.textContent = 'Working…';
-    vscode.postMessage({ type: 'mcpToggle' });
-  });
-
-  if (mcpCopyConfig) {
-    mcpCopyConfig.addEventListener('click', () => vscode.postMessage({ type: 'mcpCopyConfig' }));
-  }
-
   openHandoffExternal?.addEventListener('click', () => {
     if (openHandoffExternal.dataset.target) {
       vscode.postMessage({ type: 'openExternalHandoff', target: openHandoffExternal.dataset.target });
     }
   });
-
-  vscode.postMessage({ type: 'mcpStatusRequest' });
 
   // ---------------------------------------------------------------------------
   // Friendly Toast Notifications
@@ -212,25 +194,6 @@
   }
 
   window.showBatonToast = showToast;
-
-  document.querySelectorAll('.personal-key-form').forEach((keyForm) => {
-    keyForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const input = keyForm.querySelector('input');
-      const value = input?.value.trim();
-      if (!value) return;
-      vscode.postMessage({ type: 'savePersonalKey', provider: keyForm.dataset.provider, value });
-      if (input) input.value = '';
-      if (settingsStatus) settingsStatus.textContent = 'Saving key…';
-    });
-  });
-
-  document.querySelectorAll('.remove-key').forEach((button) => {
-    button.addEventListener('click', () => {
-      vscode.postMessage({ type: 'clearPersonalKey', provider: button.dataset.provider });
-      if (settingsStatus) settingsStatus.textContent = 'Removing key…';
-    });
-  });
 
   // ---------------------------------------------------------------------------
   // Turn Stepper Helper
@@ -348,7 +311,7 @@
 
     const loadingCard = document.createElement('div');
     loadingCard.className = 'assistant-loading-card';
-    loadingCard.innerHTML = '<span class="spinner"></span> Routing task via Gemma…';
+    loadingCard.innerHTML = '<span class="spinner"></span> Routing task…';
 
     assistantTurn.append(header, loadingCard);
     chatMessages.appendChild(assistantTurn);
@@ -377,11 +340,11 @@
     header.innerHTML = `
       ${BATON_LOGO_SVG}
       <span class="assistant-turn-name">Baton Router</span>
-      <div class="router-chip" title="Routing fallback hierarchy: Gemma 4 (AI Studio) -> Ollama -> Rules">
+      <div class="router-chip" title="The selected provider runs first; the other provider and rules are fallbacks.">
         <span class="router-chip-label">Router:</span>
-        <span class="chip-tier chip-gemma ${tier === 'gemma' ? 'active' : ''}">Gemma</span>
+        <span class="chip-tier chip-gemma ${tier === 'gemma' ? 'active' : ''}">AI Studio</span>
         <span class="chip-sep">|</span>
-        <span class="chip-tier chip-ollama ${tier === 'ollama' ? 'active' : ''}">Ollama</span>
+        <span class="chip-tier chip-ollama ${tier === 'ollama' ? 'active' : ''}">Ollama Cloud</span>
         <span class="chip-sep">|</span>
         <span class="chip-tier chip-rules ${tier === 'rules' ? 'active' : ''}">Rules</span>
       </div>
@@ -807,17 +770,20 @@
     }
 
     if (data.type === 'personalKeysStatus') {
-      for (const provider of ['gemma', 'elevenlabs']) {
-        const configured = data.configured?.[provider] === true;
-        const statusEl = document.getElementById(`${provider}-key-status`);
-        if (statusEl) {
-          statusEl.textContent = configured ? 'Your key is active' : 'Using default if available';
-        }
-        const removeBtn = document.querySelector(`.remove-key[data-provider="${provider}"]`);
-        if (removeBtn) removeBtn.disabled = !configured;
-      }
-      if (settingsStatus) settingsStatus.textContent = data.notice || '';
       if (data.notice) showToast(data.notice, data.notice.startsWith('Could not') ? 'error' : 'success');
+      return;
+    }
+
+    if (data.type === 'routerSettingsStatus') {
+      if (data.settings) {
+        const primaryModel = data.settings.primary === 'ollama'
+          ? data.settings.ollamaModel : data.settings.gemmaModel;
+        const label = document.getElementById('dock-router-label');
+        if (label) label.textContent = primaryModel;
+        const pill = document.getElementById('router-indicator-pill');
+        if (pill) pill.title = `Primary router: ${primaryModel} (${data.settings.primary === 'ollama' ? 'Ollama Cloud' : 'Google AI Studio'}). Other provider and rules are fallbacks.`;
+      }
+      if (data.notice) showToast(data.notice, data.notice.startsWith('Could not') || data.notice.startsWith('Choose') ? 'error' : 'success');
       return;
     }
 
@@ -844,18 +810,6 @@
 
     if (data.type === 'voiceTranscribing') {
       showToast('Transcribing speech…', 'info', 3000);
-      return;
-    }
-
-    if (data.type === 'mcpStatus') {
-      if (mcpBtn) {
-        mcpBtn.disabled = false;
-        mcpBtn.textContent = data.running ? 'Stop MCP' : 'Start MCP';
-        mcpBtn.title = data.running ? 'Stop the Baton MCP server' : 'Start the Baton MCP server';
-      }
-      if (mcpConnection) mcpConnection.hidden = !data.running;
-      if (mcpEndpoint) mcpEndpoint.textContent = data.running ? `${data.command} "${data.endpoint}"` : '';
-      if (data.notice) showToast(data.notice, data.running ? 'success' : 'info', 3500);
       return;
     }
 
@@ -1008,5 +962,6 @@
   });
 
   vscode.postMessage({ type: 'handoffAvailabilityRequest' });
+  vscode.postMessage({ type: 'routerSettingsStatus' });
   vscode.postMessage({ type: 'checkProjectState' });
 })();

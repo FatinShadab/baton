@@ -181,13 +181,34 @@ export type SessionViewMessage =
   | { type: 'openProject' }
   | { type: 'newSession' }
   | { type: 'selectSession'; sessionId: string }
-  | { type: 'deleteSession'; sessionId: string };
+  | { type: 'deleteSession'; sessionId: string }
+  | { type: 'openVsCodeSetKeys' }
+  | { type: 'personalKeysStatus' }
+  | { type: 'savePersonalKey'; provider: 'gemma' | 'ollama' | 'elevenlabs'; value: string }
+  | { type: 'clearPersonalKey'; provider: 'gemma' | 'ollama' | 'elevenlabs' }
+  | { type: 'routerSettingsStatus' }
+  | { type: 'saveRouterSettings'; settings: unknown }
+  | { type: 'mcpStatusRequest' }
+  | { type: 'mcpToggle' }
+  | { type: 'mcpCopyConfig' };
 
 export function isSessionViewMessage(message: unknown): message is SessionViewMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
-  if (message.type === 'loadSessions' || message.type === 'newSession' || message.type === 'openProject') return true;
+  if (message.type === 'loadSessions' || message.type === 'newSession' || message.type === 'openProject'
+    || message.type === 'openVsCodeSetKeys' || message.type === 'personalKeysStatus'
+    || message.type === 'routerSettingsStatus' || message.type === 'mcpStatusRequest'
+    || message.type === 'mcpToggle' || message.type === 'mcpCopyConfig') {
+    return true;
+  }
   if ((message.type === 'selectSession' || message.type === 'deleteSession')
     && 'sessionId' in message && typeof message.sessionId === 'string' && message.sessionId.length > 0) {
+    return true;
+  }
+  if ((message.type === 'savePersonalKey' || message.type === 'clearPersonalKey')
+    && 'provider' in message && (message.provider === 'gemma' || message.provider === 'ollama' || message.provider === 'elevenlabs')) {
+    return true;
+  }
+  if (message.type === 'saveRouterSettings' && 'settings' in message) {
     return true;
   }
   return false;

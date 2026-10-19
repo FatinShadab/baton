@@ -2,7 +2,7 @@ import type { Disposable, SecretStorage } from 'vscode';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ZodType, ZodTypeDef } from 'zod';
-import { getKey, preferredKey } from '../secrets';
+import { preferredKey } from '../secrets';
 import { loadAvailability, loadKB } from '../kb/store';
 import { researchAgents } from '../kb/research';
 import type { Candidate } from '../kb/research';
@@ -15,6 +15,7 @@ import { callOllamaJsonWithKey, routeOllama } from './ollama';
 import { classify, isCodingDestination, withKbFallback } from './rules';
 import type { CodingDestination } from './rules';
 import { RouterHttpError, RouterMissingKeyError, RouterTimeoutError } from './timeout';
+import { getRouterSettings, RouterSettings, setRouterSettings } from './settings';
 
 export type RouterKbContext = {
   readonly extensionUri: { readonly fsPath: string };
@@ -33,11 +34,18 @@ export function initializeRouter(secrets: SecretStorage, kb?: RouterKbContext): 
   cache.clear();
   generation++;
   return secrets.onDidChange(({ key }) => {
-    if (key === 'GEMINI_API_KEY' || key === 'BATON_PERSONAL_GEMINI_API_KEY' || key === 'OLLAMA_API_KEY') {
+    if (key === 'GEMINI_API_KEY' || key === 'BATON_PERSONAL_GEMINI_API_KEY'
+      || key === 'OLLAMA_API_KEY' || key === 'BATON_PERSONAL_OLLAMA_API_KEY') {
       cache.clear();
       generation++;
     }
   });
+}
+
+export function configureRouter(settings: RouterSettings): void {
+  setRouterSettings(settings);
+  cache.clear();
+  generation++;
 }
 
 function describeCallError(error: unknown): string {
@@ -48,10 +56,7 @@ function describeCallError(error: unknown): string {
     : 'connection failed';
 }
 
-/**
- * Generic JSON call for non-routing work. Tries Gemma, then Ollama, with the
- * same timeouts and fence-stripping as the router.
- */
+/** Generic JSON call for non-routing work, using the selected provider first. */
 export async function callJson<T>(
   systemPrompt: string,
   userPrompt: string,
@@ -61,24 +66,22 @@ export async function callJson<T>(
   if (!secrets) throw new Error('Baton router is not initialized.');
   const failures: string[] = [];
 
-  try {
-    const apiKey = await preferredKey(secrets, 'gemma');
-    if (!apiKey) throw new RouterMissingKeyError();
-    const parsed = schema.safeParse(await callGemmaJsonWithKey(apiKey, systemPrompt, userPrompt));
-    if (parsed.success) return parsed.data;
-    failures.push('gemma: invalid JSON');
-  } catch (error) {
-    failures.push(`gemma: ${describeCallError(error)}`);
-  }
-
-  try {
-    const apiKey = await getKey(secrets, 'OLLAMA_API_KEY');
-    if (!apiKey) throw new RouterMissingKeyError();
-    const parsed = schema.safeParse(await callOllamaJsonWithKey(apiKey, systemPrompt, userPrompt));
-    if (parsed.success) return parsed.data;
-    failures.push('ollama: invalid JSON');
-  } catch (error) {
-    failures.push(`ollama: ${describeCallError(error)}`);
+  const primary = getRouterSettings().primary;
+  const providers = primary === 'gemma'
+    ? (['gemma', 'ollama'] as const) : (['ollama', 'gemma'] as const);
+  for (const provider of providers) {
+    try {
+      const apiKey = await preferredKey(secrets, provider);
+      if (!apiKey) throw new RouterMissingKeyError();
+      const value = provider === 'gemma'
+        ? await callGemmaJsonWithKey(apiKey, systemPrompt, userPrompt)
+        : await callOllamaJsonWithKey(apiKey, systemPrompt, userPrompt);
+      const parsed = schema.safeParse(value);
+      if (parsed.success) return parsed.data;
+      failures.push(`${provider}: invalid JSON`);
+    } catch (error) {
+      failures.push(`${provider}: ${describeCallError(error)}`);
+    }
   }
 
   throw new Error(`Baton could not get valid JSON (${failures.join('; ')}).`);
@@ -179,7 +182,10 @@ export async function routeTask(task: string, ctxSnippet: string, workspaceUri =
   const failures: string[] = [];
 
   if (keyStore && task.trim()) {
-    for (const [providerTier, provider] of [['gemma', routeGemma], ['ollama', routeOllama]] as const) {
+    const providers = getRouterSettings().primary === 'gemma'
+      ? ([['gemma', routeGemma], ['ollama', routeOllama]] as const)
+      : ([['ollama', routeOllama], ['gemma', routeGemma]] as const);
+    for (const [providerTier, provider] of providers) {
       try {
         const value = await provider(keyStore, task, ctxSnippet);
         const parsed = RouteSchema.safeParse(value);
@@ -199,8 +205,9 @@ export async function routeTask(task: string, ctxSnippet: string, workspaceUri =
     baseRoute = classify(task);
     tier = 'rules';
     notice = `Using local rules (${failures.join('; ') || 'router unavailable'}).`;
-  } else if (tier === 'ollama' && failures.length) {
-    notice = `Gemma unavailable (${failures[0]}). Routed via Ollama.`;
+  } else if (failures.length) {
+    const fallback = tier === 'ollama' ? 'Ollama' : 'Google AI Studio';
+    notice = `${getRouterSettings().primary === 'gemma' ? 'Google AI Studio' : 'Ollama Cloud'} unavailable (${failures[0]}). Routed via ${fallback}.`;
   }
 
   let route: Route = {

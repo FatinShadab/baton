@@ -113,6 +113,135 @@
     });
   }
 
+  // Modal controls
+  const sidebarMcpBtn = document.getElementById('sidebar-mcp-btn');
+  const sidebarSettingsBtn = document.getElementById('sidebar-settings-btn');
+  const mcpModal = document.getElementById('mcp-modal');
+  const mcpModalClose = document.getElementById('mcp-modal-close');
+  const settingsModal = document.getElementById('settings-modal');
+  const settingsModalClose = document.getElementById('settings-modal-close');
+
+  // MCP elements
+  const mcpIndicator = document.getElementById('sidebar-mcp-indicator');
+  const mcpStatusText = document.getElementById('sidebar-mcp-status-text');
+  const mcpToggleBtn = document.getElementById('sidebar-mcp-toggle');
+  const mcpEndpointBox = document.getElementById('sidebar-mcp-endpoint-box');
+  const mcpEndpointCode = document.getElementById('sidebar-mcp-endpoint');
+  const mcpCopyBtn = document.getElementById('sidebar-mcp-copy');
+
+  // Settings elements
+  const vscodeKeysBtn = document.getElementById('sidebar-vscode-keys-btn');
+  const routerForm = document.getElementById('sidebar-router-form');
+  const routerPrimary = document.getElementById('sidebar-router-primary');
+  const gemmaModelInput = document.getElementById('sidebar-gemma-model');
+  const ollamaModelInput = document.getElementById('sidebar-ollama-model');
+  const gemmaKeyTag = document.getElementById('gemma-key-tag');
+  const ollamaKeyTag = document.getElementById('ollama-key-tag');
+  const elevenlabsKeyTag = document.getElementById('elevenlabs-key-tag');
+  const keyGemmaInput = document.getElementById('sidebar-key-gemma');
+  const keyOllamaInput = document.getElementById('sidebar-key-ollama');
+  const keyElevenlabsInput = document.getElementById('sidebar-key-elevenlabs');
+  const settingsNotice = document.getElementById('sidebar-settings-notice');
+
+  function openModal(modal) {
+    if (!modal) return;
+    modal.hidden = false;
+  }
+
+  function closeModal(modal) {
+    if (!modal) return;
+    modal.hidden = true;
+  }
+
+  function showNotice(text) {
+    if (!settingsNotice) return;
+    settingsNotice.textContent = text;
+    settingsNotice.hidden = false;
+    setTimeout(() => {
+      settingsNotice.hidden = true;
+    }, 4000);
+  }
+
+  // Open & Close Handlers
+  sidebarMcpBtn?.addEventListener('click', () => {
+    openModal(mcpModal);
+    vscode.postMessage({ type: 'mcpStatusRequest' });
+  });
+
+  mcpModalClose?.addEventListener('click', () => closeModal(mcpModal));
+  mcpModal?.addEventListener('click', (e) => {
+    if (e.target === mcpModal) closeModal(mcpModal);
+  });
+
+  sidebarSettingsBtn?.addEventListener('click', () => {
+    openModal(settingsModal);
+    vscode.postMessage({ type: 'personalKeysStatus' });
+    vscode.postMessage({ type: 'routerSettingsStatus' });
+  });
+
+  settingsModalClose?.addEventListener('click', () => closeModal(settingsModal));
+  settingsModal?.addEventListener('click', (e) => {
+    if (e.target === settingsModal) closeModal(settingsModal);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeModal(mcpModal);
+      closeModal(settingsModal);
+    }
+  });
+
+  // MCP interactions
+  mcpToggleBtn?.addEventListener('click', () => {
+    mcpToggleBtn.disabled = true;
+    mcpToggleBtn.textContent = 'Working…';
+    vscode.postMessage({ type: 'mcpToggle' });
+  });
+
+  mcpCopyBtn?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'mcpCopyConfig' });
+  });
+
+  // Settings interactions
+  vscodeKeysBtn?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'openVsCodeSetKeys' });
+  });
+
+  routerForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    vscode.postMessage({
+      type: 'saveRouterSettings',
+      settings: {
+        primary: routerPrimary.value,
+        gemmaModel: gemmaModelInput.value.trim(),
+        ollamaModel: ollamaModelInput.value.trim(),
+      },
+    });
+  });
+
+  document.querySelectorAll('.btn-key-save').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const provider = btn.getAttribute('data-provider');
+      let val = '';
+      if (provider === 'gemma') val = keyGemmaInput?.value.trim() || '';
+      else if (provider === 'ollama') val = keyOllamaInput?.value.trim() || '';
+      else if (provider === 'elevenlabs') val = keyElevenlabsInput?.value.trim() || '';
+
+      if (!val) {
+        showNotice('Please enter an API key first.');
+        return;
+      }
+      vscode.postMessage({ type: 'savePersonalKey', provider, value: val });
+    });
+  });
+
+  document.querySelectorAll('.btn-key-remove').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const provider = btn.getAttribute('data-provider');
+      vscode.postMessage({ type: 'clearPersonalKey', provider });
+    });
+  });
+
   newSessionBtn?.addEventListener('click', () => {
     if (!currentProject) {
       vscode.postMessage({ type: 'openProject' });
@@ -141,8 +270,52 @@
     } else if (message.type === 'activeSessionChanged') {
       currentActiveId = message.activeSessionId;
       renderSessions();
+    } else if (message.type === 'mcpStatus') {
+      if (mcpToggleBtn) {
+        mcpToggleBtn.disabled = false;
+        mcpToggleBtn.textContent = message.running ? 'Stop MCP' : 'Start MCP';
+      }
+      if (mcpIndicator) {
+        mcpIndicator.classList.toggle('active', Boolean(message.running));
+      }
+      if (mcpStatusText) {
+        mcpStatusText.textContent = message.running ? 'Server Running' : 'Server Stopped';
+      }
+      if (mcpEndpointBox) {
+        mcpEndpointBox.hidden = !message.running;
+      }
+      if (mcpEndpointCode) {
+        mcpEndpointCode.textContent = message.running ? `${message.command || 'baton-mcp-server'} "${message.endpoint || ''}"` : '';
+      }
+    } else if (message.type === 'personalKeysStatus') {
+      const configured = message.configured || {};
+      if (gemmaKeyTag) {
+        gemmaKeyTag.textContent = configured.gemma ? 'Configured' : 'Not set';
+        gemmaKeyTag.classList.toggle('configured', Boolean(configured.gemma));
+      }
+      if (ollamaKeyTag) {
+        ollamaKeyTag.textContent = configured.ollama ? 'Configured' : 'Not set';
+        ollamaKeyTag.classList.toggle('configured', Boolean(configured.ollama));
+      }
+      if (elevenlabsKeyTag) {
+        elevenlabsKeyTag.textContent = configured.elevenlabs ? 'Configured' : 'Not set';
+        elevenlabsKeyTag.classList.toggle('configured', Boolean(configured.elevenlabs));
+      }
+      if (message.notice) {
+        showNotice(message.notice);
+      }
+    } else if (message.type === 'routerSettingsStatus') {
+      if (message.settings) {
+        if (routerPrimary) routerPrimary.value = message.settings.primary;
+        if (gemmaModelInput) gemmaModelInput.value = message.settings.gemmaModel;
+        if (ollamaModelInput) ollamaModelInput.value = message.settings.ollamaModel;
+      }
+      if (message.notice) {
+        showNotice(message.notice);
+      }
     }
   });
 
   vscode.postMessage({ type: 'loadSessions' });
+  vscode.postMessage({ type: 'mcpStatusRequest' });
 })();

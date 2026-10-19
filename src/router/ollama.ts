@@ -1,10 +1,9 @@
 import type { SecretStorage } from 'vscode';
-import { getKey } from '../secrets';
+import { preferredKey } from '../secrets';
 import { parseJsonObject, parseRouteJson, ROUTE_INSTRUCTIONS, routePrompt } from './prompt';
 import { RouterHttpError, RouterMissingKeyError, withinDeadline } from './timeout';
+import { getRouterSettings } from './settings';
 
-// Switch to 'gemma4:31b-cloud' if the cloud account requires that tag.
-export const OLLAMA_MODEL = 'gemma4:31b';
 const OLLAMA_TIMEOUT_MS = 12_000;
 
 async function requestOllama(
@@ -18,7 +17,7 @@ async function requestOllama(
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     signal,
     body: JSON.stringify({
-      model: OLLAMA_MODEL,
+      model: getRouterSettings().ollamaModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -38,7 +37,7 @@ async function requestOllama(
 
 export async function routeOllama(secrets: SecretStorage, task: string, ctxSnippet: string): Promise<unknown> {
   return withinDeadline(async (signal) => {
-    const apiKey = await getKey(secrets, 'OLLAMA_API_KEY');
+    const apiKey = await preferredKey(secrets, 'ollama');
     if (!apiKey) throw new RouterMissingKeyError();
     if (signal.aborted) return undefined;
     const content = await requestOllama(apiKey, ROUTE_INSTRUCTIONS, routePrompt(task, ctxSnippet), signal);

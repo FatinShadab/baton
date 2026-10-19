@@ -9,12 +9,33 @@
 </head>
 <body>
   <header class="session-header">
-    <div class="session-brand">
-      <svg class="baton-brand-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="m6 16 10-10a2.12 2.12 0 0 1 3 3L9 19a2.12 2.12 0 0 1-3-3Z"/>
-        <path d="m13 9 3 3M5 5v4M3 7h4"/>
-      </svg>
-      <span class="brand-title">Baton</span>
+    <div class="session-header-row">
+      <div class="session-brand">
+        <svg class="baton-brand-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m6 16 10-10a2.12 2.12 0 0 1 3 3L9 19a2.12 2.12 0 0 1-3-3Z"/>
+          <path d="m13 9 3 3M5 5v4M3 7h4"/>
+        </svg>
+        <span class="brand-title">Baton</span>
+      </div>
+      <div class="header-action-group">
+        <button id="sidebar-mcp-btn" type="button" class="btn-header-tool" title="Model Context Protocol (MCP)">
+          <svg class="header-tool-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+            <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+            <line x1="6" y1="1" x2="6" y2="4"></line>
+            <line x1="10" y1="1" x2="10" y2="4"></line>
+            <line x1="14" y1="1" x2="14" y2="4"></line>
+          </svg>
+          <span class="btn-text">MCP</span>
+        </button>
+        <button id="sidebar-settings-btn" type="button" class="btn-header-tool" title="Settings & API Keys">
+          <svg class="header-tool-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span class="btn-text">Settings</span>
+        </button>
+      </div>
     </div>
     <div class="section-label">
       <span class="section-arrow">▾</span> TASK MANAGER
@@ -60,6 +81,132 @@
       <div id="empty-state" class="empty-state">
         <p class="empty-msg">No tasks yet</p>
         <p class="empty-hint">Start a new conversation to create your first task for this project.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MCP Modal Dialog -->
+  <div id="mcp-modal" class="modal-backdrop" hidden>
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="mcp-modal-title">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+            <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+            <line x1="6" y1="1" x2="6" y2="4"></line>
+            <line x1="10" y1="1" x2="10" y2="4"></line>
+            <line x1="14" y1="1" x2="14" y2="4"></line>
+          </svg>
+          <h3 id="mcp-modal-title" class="modal-title">Model Context Protocol</h3>
+        </div>
+        <button id="mcp-modal-close" type="button" class="modal-close" aria-label="Close MCP dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Expose Baton's local task history, plans, and workspace context to Cursor, Claude Desktop, or Windsurf via stdio.</p>
+        
+        <div class="mcp-server-status-card">
+          <div class="mcp-status-row">
+            <span class="mcp-status-indicator" id="sidebar-mcp-indicator"></span>
+            <span id="sidebar-mcp-status-text" class="mcp-status-text">Checking server…</span>
+          </div>
+          <button id="sidebar-mcp-toggle" type="button" class="btn-primary mcp-toggle-action">Start MCP</button>
+        </div>
+
+        <div id="sidebar-mcp-endpoint-box" class="mcp-endpoint-box" hidden>
+          <div class="mcp-box-label">Active Endpoint</div>
+          <code id="sidebar-mcp-endpoint" class="endpoint-code"></code>
+        </div>
+
+        <div class="mcp-client-card">
+          <div class="mcp-card-head">Connect an MCP client</div>
+          <p class="mcp-card-note">Copy JSON config and paste into Cursor or Claude Desktop settings.</p>
+          <button id="sidebar-mcp-copy" type="button" class="btn-secondary btn-full">
+            📋 Copy Client Config
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal Dialog -->
+  <div id="settings-modal" class="modal-backdrop" hidden>
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <h3 id="settings-modal-title" class="modal-title">Settings & Keys</h3>
+        </div>
+        <button id="settings-modal-close" type="button" class="modal-close" aria-label="Close Settings dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Quick VS Code Prompts -->
+        <div class="settings-section">
+          <button id="sidebar-vscode-keys-btn" type="button" class="btn-secondary btn-full">
+            🔑 Set Keys via VS Code Prompt
+          </button>
+        </div>
+
+        <!-- Intelligent Router Settings -->
+        <div class="settings-section">
+          <h4 class="settings-heading">Intelligent Routing</h4>
+          <form id="sidebar-router-form">
+            <label class="setting-label" for="sidebar-router-primary">Primary Provider</label>
+            <select id="sidebar-router-primary" class="setting-select">
+              <option value="gemma">Google AI Studio</option>
+              <option value="ollama">Ollama Cloud</option>
+            </select>
+            <label class="setting-label" for="sidebar-gemma-model">Google AI Studio Model</label>
+            <input id="sidebar-gemma-model" class="setting-input" type="text" value="gemma-4-26b-a4b-it" spellcheck="false">
+            <label class="setting-label" for="sidebar-ollama-model">Ollama Cloud Model</label>
+            <input id="sidebar-ollama-model" class="setting-input" type="text" value="gemma4:31b" spellcheck="false">
+            <button type="submit" class="btn-primary btn-full save-routing-btn">Save Routing Settings</button>
+          </form>
+        </div>
+
+        <!-- API Keys -->
+        <div class="settings-section">
+          <h4 class="settings-heading">API Keys (SecretStorage)</h4>
+          <div class="key-item">
+            <div class="key-header">
+              <span class="key-name">Google AI Studio</span>
+              <span id="gemma-key-tag" class="key-tag">Checking…</span>
+            </div>
+            <div class="key-input-row">
+              <input id="sidebar-key-gemma" type="password" class="setting-input" placeholder="Paste API key" spellcheck="false">
+              <button type="button" class="btn-key-save" data-provider="gemma">Save</button>
+              <button type="button" class="btn-key-remove" data-provider="gemma">✕</button>
+            </div>
+          </div>
+
+          <div class="key-item">
+            <div class="key-header">
+              <span class="key-name">Ollama Cloud</span>
+              <span id="ollama-key-tag" class="key-tag">Checking…</span>
+            </div>
+            <div class="key-input-row">
+              <input id="sidebar-key-ollama" type="password" class="setting-input" placeholder="Paste API key" spellcheck="false">
+              <button type="button" class="btn-key-save" data-provider="ollama">Save</button>
+              <button type="button" class="btn-key-remove" data-provider="ollama">✕</button>
+            </div>
+          </div>
+
+          <div class="key-item">
+            <div class="key-header">
+              <span class="key-name">ElevenLabs (Voice)</span>
+              <span id="elevenlabs-key-tag" class="key-tag">Checking…</span>
+            </div>
+            <div class="key-input-row">
+              <input id="sidebar-key-elevenlabs" type="password" class="setting-input" placeholder="Paste API key" spellcheck="false">
+              <button type="button" class="btn-key-save" data-provider="elevenlabs">Save</button>
+              <button type="button" class="btn-key-remove" data-provider="elevenlabs">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <p id="sidebar-settings-notice" class="sidebar-settings-notice" hidden></p>
       </div>
     </div>
   </div>

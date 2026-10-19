@@ -3,6 +3,11 @@ import { randomBytes } from 'node:crypto';
 import { JsonStore } from './store';
 import { isSessionViewMessage, SessionRecord } from './types';
 import { currentProject, sameProject } from './project';
+import { clearPersonalKey, personalKeyStatus, savePersonalKey, setKeys } from './secrets';
+import { configureRouter } from './router';
+import { getRouterSettings, RouterSettingsSchema } from './router/settings';
+import { copyMcpConfig, serverOptions } from './mcp/config';
+import { McpSession } from './mcp/session';
 
 export class SessionViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'baton.sessions';
@@ -14,6 +19,9 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
     private readonly store: JsonStore,
     private readonly onSelectSession: (sessionId: string) => Promise<void> | void,
     private readonly onNewSession: () => Promise<void> | void,
+    private readonly secrets: vscode.SecretStorage,
+    private readonly mcp: McpSession,
+    private readonly context: vscode.ExtensionContext,
   ) {}
 
   public setActiveSessionId(id: string | undefined): void {
@@ -99,6 +107,71 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
             this.activeSessionId = undefined;
           }
           await this.refresh();
+        } else if (message.type === 'personalKeysStatus') {
+          const configured = await personalKeyStatus(this.secrets);
+          await this.view?.webview.postMessage({ type: 'personalKeysStatus', configured });
+        } else if (message.type === 'savePersonalKey') {
+          const saved = await savePersonalKey(this.secrets, message.provider, message.value);
+          const configured = await personalKeyStatus(this.secrets);
+          const name = message.provider === 'gemma' ? 'Google AI Studio' : message.provider === 'ollama' ? 'Ollama Cloud' : 'ElevenLabs';
+          await this.view?.webview.postMessage({
+            type: 'personalKeysStatus',
+            configured,
+            notice: saved ? `${name} key saved.` : `Could not save ${name} key.`,
+          });
+        } else if (message.type === 'clearPersonalKey') {
+          const cleared = await clearPersonalKey(this.secrets, message.provider);
+          const configured = await personalKeyStatus(this.secrets);
+          const name = message.provider === 'gemma' ? 'Google AI Studio' : message.provider === 'ollama' ? 'Ollama Cloud' : 'ElevenLabs';
+          await this.view?.webview.postMessage({
+            type: 'personalKeysStatus',
+            configured,
+            notice: cleared ? `${name} key removed.` : `Could not remove ${name} key.`,
+          });
+        } else if (message.type === 'openVsCodeSetKeys') {
+          await setKeys(this.secrets);
+          const configured = await personalKeyStatus(this.secrets);
+          await this.view?.webview.postMessage({ type: 'personalKeysStatus', configured });
+        } else if (message.type === 'routerSettingsStatus') {
+          await this.view?.webview.postMessage({ type: 'routerSettingsStatus', settings: getRouterSettings() });
+        } else if (message.type === 'saveRouterSettings') {
+          const parsed = RouterSettingsSchema.safeParse(message.settings);
+          if (parsed.success && (await this.store.saveRouterSettings(parsed.data))) {
+            configureRouter(parsed.data);
+            await this.view?.webview.postMessage({
+              type: 'routerSettingsStatus',
+              settings: getRouterSettings(),
+              notice: 'Intelligent routing settings saved.',
+            });
+          } else {
+            await this.view?.webview.postMessage({
+              type: 'routerSettingsStatus',
+              settings: getRouterSettings(),
+              notice: 'Could not save routing settings.',
+            });
+          }
+        } else if (message.type === 'mcpStatusRequest') {
+          let options;
+          try { options = this.mcp.running ? serverOptions(this.context) : undefined; } catch { /* closed */ }
+          await this.view?.webview.postMessage({
+            type: 'mcpStatus',
+            running: this.mcp.running,
+            endpoint: options?.args[0],
+            command: options?.command,
+          });
+        } else if (message.type === 'mcpToggle') {
+          const notice = this.mcp.running ? await this.mcp.stop() : await this.mcp.start();
+          let options;
+          try { options = this.mcp.running ? serverOptions(this.context) : undefined; } catch { /* closed */ }
+          await this.view?.webview.postMessage({
+            type: 'mcpStatus',
+            running: this.mcp.running,
+            endpoint: options?.args[0],
+            command: options?.command,
+            notice,
+          });
+        } else if (message.type === 'mcpCopyConfig') {
+          await copyMcpConfig(this.context);
         }
       } catch {
         // Fall through safely

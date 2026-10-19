@@ -1,7 +1,8 @@
 import { parseJsonObject, parseRouteJson, ROUTE_INSTRUCTIONS, routePrompt } from './prompt';
 import { RouterHttpError, withinDeadline } from './timeout';
+import { DEFAULT_GEMMA_MODEL, getRouterSettings } from './settings';
 
-const GEMMA_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent';
+const GEMMA_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 /** One Gemma request with the same 5xx retry the router has always used. */
 async function requestGemma(
@@ -10,6 +11,7 @@ async function requestGemma(
   userPrompt: string,
   signal: AbortSignal,
 ): Promise<string | undefined> {
+  const model = getRouterSettings().gemmaModel;
   const request = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -17,13 +19,15 @@ async function requestGemma(
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-      generationConfig: { thinkingConfig: { thinkingLevel: 'minimal' } },
+      ...(model === DEFAULT_GEMMA_MODEL
+        ? { generationConfig: { thinkingConfig: { thinkingLevel: 'minimal' } } } : {}),
     }),
   };
-  let response = await fetch(GEMMA_URL, request);
+  const url = `${GEMMA_BASE_URL}${encodeURIComponent(model)}:generateContent`;
+  let response = await fetch(url, request);
   if (response.status >= 500 && !signal.aborted) {
     try { await response.body?.cancel(); } catch { /* Retry is still safe. */ }
-    response = await fetch(GEMMA_URL, request);
+    response = await fetch(url, request);
   }
   if (!response.ok) throw new RouterHttpError(response.status);
   const data: unknown = await response.json();

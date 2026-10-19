@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { clearPersonalKey, personalKeyStatus, savePersonalKey } from './secrets';
 import { JsonStore } from './store';
-import { routeTask } from './router';
+import { configureRouter, routeTask } from './router';
+import { getRouterSettings, RouterSettingsSchema } from './router/settings';
 import { decide } from './policy';
 import {
   ExtensionMessage,
@@ -286,18 +287,33 @@ export class BatonEditorPanel {
       }
 
       if (message.type === 'personalKeysStatus' || message.type === 'savePersonalKey' || message.type === 'clearPersonalKey') {
-        const provider = 'provider' in message && (message.provider === 'gemma' || message.provider === 'elevenlabs')
+        const provider = 'provider' in message && (message.provider === 'gemma'
+          || message.provider === 'ollama' || message.provider === 'elevenlabs')
           ? message.provider : undefined;
         let notice: string | undefined;
         if (message.type === 'savePersonalKey' && provider) {
           const value = 'value' in message && typeof message.value === 'string' ? message.value.trim() : '';
           notice = value && value.length <= 4096 && await savePersonalKey(this.secrets, provider, value)
-            ? `${provider === 'gemma' ? 'Gemma' : 'ElevenLabs'} key saved.` : 'Could not save the key.';
+            ? `${provider === 'gemma' ? 'Google AI Studio' : provider === 'ollama' ? 'Ollama Cloud' : 'ElevenLabs'} key saved.` : 'Could not save the key.';
         } else if (message.type === 'clearPersonalKey' && provider) {
           notice = await clearPersonalKey(this.secrets, provider)
-            ? `${provider === 'gemma' ? 'Gemma' : 'ElevenLabs'} key removed.` : 'Could not remove the key.';
+            ? `${provider === 'gemma' ? 'Google AI Studio' : provider === 'ollama' ? 'Ollama Cloud' : 'ElevenLabs'} key removed.` : 'Could not remove the key.';
         }
         await this.postMessage({ type: 'personalKeysStatus', configured: await personalKeyStatus(this.secrets), notice });
+        return;
+      }
+
+      if (message.type === 'routerSettingsStatus' || message.type === 'saveRouterSettings') {
+        let notice: string | undefined;
+        if (message.type === 'saveRouterSettings') {
+          const parsed = RouterSettingsSchema.safeParse('settings' in message ? message.settings : undefined);
+          if (!parsed.success) notice = 'Choose a provider and enter valid model names.';
+          else if (await this.store.saveRouterSettings(parsed.data)) {
+            configureRouter(parsed.data);
+            notice = 'Intelligent routing settings saved.';
+          } else notice = 'Could not save routing settings.';
+        }
+        await this.postMessage({ type: 'routerSettingsStatus', settings: getRouterSettings(), notice });
         return;
       }
 
@@ -555,7 +571,6 @@ export class BatonEditorPanel {
         nonce: randomBytes(16).toString('hex'),
         cspSource: this.panel.webview.cspSource,
         scriptUri: this.panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'panel.js')).toString(),
-        historyUri: this.panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'history.js')).toString(),
         actionsUri: this.panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'task-actions.js')).toString(),
         resourcesUri: this.panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'resources.js')).toString(),
         styleUri: this.panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'panel.css')).toString(),

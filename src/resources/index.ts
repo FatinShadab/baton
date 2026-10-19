@@ -1,7 +1,8 @@
 import type { SecretStorage } from 'vscode';
 import { createHash } from 'node:crypto';
 import { TaskResourcesResult } from './types';
-import { planResearchWithGemma } from './gemma-search';
+import { planResearchWithModel } from './gemma-search';
+import { getRouterSettings } from '../router/settings';
 import {
   executeResearchPlan,
   fallbackResearchPlan,
@@ -27,9 +28,9 @@ const CACHE_LIMIT = 50;
  * Discovers technical tutorials, articles, and documentation resources for a coding task.
  * 
  * Flow:
- * 1. Gemma 4 analyzes the task/context to formulate optimal search topics and initiate tool calls.
+ * 1. The selected model analyzes the task/context to formulate search topics.
  * 2. Baton's live search tools (YouTube, Dev.to/HN, arXiv) execute those queries in parallel.
- * 3. If Gemma is unconfigured or unavailable, Baton gracefully falls back to direct keyword tools.
+ * 3. If both providers are unavailable, Baton falls back to direct keyword tools.
  */
 export async function discoverResources(
   secrets: SecretStorage,
@@ -49,17 +50,17 @@ export async function discoverResources(
     };
   }
 
-  const cacheKey = createHash('sha256').update(JSON.stringify([normalized.toLowerCase(), ctxSnippet])).digest('hex');
+  const cacheKey = createHash('sha256').update(JSON.stringify([normalized.toLowerCase(), ctxSnippet, getRouterSettings()])).digest('hex');
   const cached = cache.get(cacheKey);
   if (cached) {
     return { ...cached, taskId };
   }
 
-  // 1. Gemma 4 identifies topics and initiates tool calls
-  let plan = await planResearchWithGemma(secrets, normalized, ctxSnippet);
-  const usedGemma = Boolean(plan && plan.tool_calls && plan.tool_calls.length > 0);
+  // 1. The selected provider identifies topics and initiates tool calls
+  let plan = await planResearchWithModel(secrets, normalized, ctxSnippet);
+  const usedModel = Boolean(plan && plan.tool_calls && plan.tool_calls.length > 0);
 
-  // If Gemma is unavailable or timed out, fall back to keyword tool plan
+  // If both providers are unavailable, fall back to keyword tools
   if (!plan) {
     const framework = /\b(?:from\s+flask\b|import\s+flask\b|Flask\s*\()/i.test(ctxSnippet) ? 'Flask Python'
       : /\b(?:from\s+fastapi\b|import\s+fastapi\b|FastAPI\s*\()/i.test(ctxSnippet) ? 'FastAPI Python'
@@ -76,9 +77,9 @@ export async function discoverResources(
     const result: TaskResourcesResult = {
       taskId,
       query: normalized,
-      tier: usedGemma ? 'intelligent' : 'keyword',
-      notice: usedGemma
-        ? 'Curated via Gemma 4 topics · Live YouTube, Dev.to & arXiv tools.'
+      tier: usedModel ? 'intelligent' : 'keyword',
+      notice: usedModel
+        ? 'Curated via your intelligent routing model · Live YouTube, Dev.to & arXiv tools.'
         : 'Discovered via keyword & syntax search (YouTube, Dev.to, arXiv).',
       videos: toolsResult.videos,
       blogs: toolsResult.blogs,

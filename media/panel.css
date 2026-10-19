@@ -1,5 +1,5 @@
-﻿/* ==========================================================================
-   Baton ΓÇö Native Theme & Baton Logo Styles
+/* ==========================================================================
+   Baton G�� Native Theme & Baton Logo Styles
    Sleek Silver & Cyan Accent Palette derived from Baton Logo & VS Code Theme.
    ========================================================================== */
 
@@ -73,8 +73,7 @@ body {
    ========================================================================== */
 .app-header {
   flex: none;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;\r\n  justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
   background-color: var(--baton-bg);
@@ -1506,7 +1505,8 @@ body.vscode-light .watermark-img {
   margin-bottom: 20px;
 }
 
-.personal-key-form {
+.personal-key-form,
+.router-settings-form {
   background: var(--baton-card);
   border: 1px solid var(--baton-border);
   border-radius: var(--baton-radius-lg);
@@ -1517,7 +1517,8 @@ body.vscode-light .watermark-img {
   margin-bottom: 16px;
 }
 
-.personal-key-form label {
+.personal-key-form label,
+.router-settings-form label {
   font-size: 12px;
   font-weight: 600;
   color: var(--baton-text-primary);
@@ -1528,7 +1529,9 @@ body.vscode-light .watermark-img {
   color: var(--baton-text-muted);
 }
 
-.personal-key-form input {
+.personal-key-form input,
+.router-settings-form input,
+.router-settings-form select {
   background: var(--baton-editor-bg);
   border: 1px solid var(--baton-border);
   border-radius: var(--baton-radius-md);
@@ -1538,7 +1541,9 @@ body.vscode-light .watermark-img {
   outline: none;
 }
 
-.personal-key-form input:focus {
+.personal-key-form input:focus,
+.router-settings-form input:focus,
+.router-settings-form select:focus {
   border-color: var(--baton-accent);
 }
 
@@ -1685,7 +1690,7 @@ body.vscode-light .watermark-img {
 }
 
 .handoff-fallback span::before {
-  content: 'Γä╣';
+  content: 'G�';
   display: inline-flex;
   align-items: center;
   justify-content: center;

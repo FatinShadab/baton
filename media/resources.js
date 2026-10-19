@@ -35,13 +35,13 @@ function initializeResources(vscode) {
     if (loadingEl) loadingEl.hidden = true;
 
     if (tierBadge) {
-      tierBadge.textContent = data.tier === 'intelligent' ? 'Gemma AI' : 'Keyword Search';
+      tierBadge.textContent = data.tier === 'intelligent' ? 'AI curated' : 'Keyword Search';
       tierBadge.className = `research-tier-badge badge-${data.tier || 'keyword'}`;
     }
 
     if (statusText) {
       statusText.textContent = data.notice || (data.tier === 'intelligent'
-        ? 'Curated via Gemma 4 (Google AI Studio).'
+        ? 'Curated via your selected intelligent routing model.'
         : 'Discovered via keyword & syntax search (YouTube, Dev.to, arXiv).');
     }
 

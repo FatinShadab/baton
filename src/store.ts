@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { SessionRecord, SessionRecordSchema, TaskRecord, TaskRecordSchema } from './types';
 import { StatsRecordSchema, StatsRecord } from './types'; export const StatsSchema = z.array(StatsRecordSchema);
+import { DEFAULT_ROUTER_SETTINGS, RouterSettings, RouterSettingsSchema } from './router/settings';
 
 const TasksSchema = z.array(TaskRecordSchema);
 const SessionsSchema = z.array(SessionRecordSchema);
@@ -157,6 +158,14 @@ export class JsonStore {
   /** Save stats to global storage */
   async saveStats(stats: StatsRecord[]): Promise<boolean> {
     return this.write('stats.json', StatsSchema, stats);
+  }
+
+  loadRouterSettings(): Promise<RouterSettings | undefined> {
+    return this.read('router-settings.json', RouterSettingsSchema, DEFAULT_ROUTER_SETTINGS);
+  }
+
+  saveRouterSettings(settings: RouterSettings): Promise<boolean> {
+    return this.write('router-settings.json', RouterSettingsSchema, settings);
   }
 
   /** Load availability info from global storage */

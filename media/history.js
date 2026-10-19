@@ -13,7 +13,7 @@ function initializeHistory(vscode, taskActions) {
   const expanded = new Set();
   const drafts = new Map();
   let busy = false;
-  const tiers = { gemma: 'Gemma', ollama: 'Ollama', rules: 'Rules' };
+  const tiers = { gemma: 'Google AI Studio', ollama: 'Ollama Cloud', rules: 'Rules' };
 
   function notify(msg, type = 'info') {
     if (typeof window.showBatonToast === 'function') {
@@ -47,6 +47,7 @@ function initializeHistory(vscode, taskActions) {
       loadHistory();
     } else if (index === 2) {
       vscode.postMessage({ type: 'personalKeysStatus' });
+      vscode.postMessage({ type: 'routerSettingsStatus' });
     } else if (index === 3) {
       vscode.postMessage({ type: 'mcpStatusRequest' });
     }

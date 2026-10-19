@@ -4,18 +4,21 @@ export const KEY_NAMES = ['GEMINI_API_KEY', 'OLLAMA_API_KEY', 'ELEVENLABS_API_KE
 export type KeyName = typeof KEY_NAMES[number];
 export const PERSONAL_KEYS = {
   gemma: 'BATON_PERSONAL_GEMINI_API_KEY',
+  ollama: 'BATON_PERSONAL_OLLAMA_API_KEY',
   elevenlabs: 'BATON_PERSONAL_ELEVENLABS_API_KEY',
 } as const;
 export type PersonalProvider = keyof typeof PERSONAL_KEYS;
 
 export async function preferredKey(secrets: vscode.SecretStorage, provider: PersonalProvider): Promise<string | undefined> {
   return (await getKey(secrets, PERSONAL_KEYS[provider]))
-    ?? getKey(secrets, provider === 'gemma' ? 'GEMINI_API_KEY' : 'ELEVENLABS_API_KEY');
+    ?? getKey(secrets, provider === 'gemma' ? 'GEMINI_API_KEY'
+      : provider === 'ollama' ? 'OLLAMA_API_KEY' : 'ELEVENLABS_API_KEY');
 }
 
 export async function personalKeyStatus(secrets: vscode.SecretStorage): Promise<Record<PersonalProvider, boolean>> {
   return {
     gemma: Boolean(await getKey(secrets, PERSONAL_KEYS.gemma)),
+    ollama: Boolean(await getKey(secrets, PERSONAL_KEYS.ollama)),
     elevenlabs: Boolean(await getKey(secrets, PERSONAL_KEYS.elevenlabs)),
   };
 }

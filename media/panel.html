@@ -19,13 +19,6 @@
       <span id="session-chip" class="session-chip" title="Active task">New task</span>
     </div>
 
-    <div class="tabs" role="tablist" aria-label="Baton navigation">
-      <button id="task-tab" type="button" role="tab" aria-selected="true" aria-controls="task-pane">Chat</button>
-      <button id="history-tab" type="button" role="tab" aria-selected="false" aria-controls="history-pane" tabindex="-1">History</button>
-      <button id="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-pane" tabindex="-1">Settings</button>
-      <button id="mcp-tab" type="button" role="tab" aria-selected="false" aria-controls="mcp-pane" tabindex="-1">MCP</button>
-    </div>
-
     <div class="header-actions">
       <button id="toggle-research-btn" type="button" class="header-btn" title="Toggle Resources and Media" aria-label="Toggle Resources and Media" aria-pressed="true">
         <svg class="header-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -95,7 +88,7 @@
                     </div>
                     <div class="guide-step">
                       <span class="guide-num">2</span>
-                      <div><strong>Intelligent routing:</strong> Gemma 4 (Google AI Studio), Ollama Cloud, or local rules inspect the task and assign a safety risk tier.</div>
+                      <div><strong>Intelligent routing:</strong> Your selected Google AI Studio or Ollama Cloud model inspects the task, with the other provider and local rules as fallbacks.</div>
                     </div>
                     <div class="guide-step">
                       <span class="guide-num">3</span>
@@ -238,77 +231,10 @@
     </div>
   </section>
 
-  <!-- HISTORY PANE -->
-  <section id="history-pane" class="tab-pane" role="tabpanel" aria-labelledby="history-tab" hidden>
-    <div class="history-actions">
-      <span id="history-project" class="history-project"></span>
-      <button id="refresh-history" type="button" class="btn-secondary">↻ Refresh history</button>
-    </div>
-    <p id="history-status" class="status-msg" role="status" aria-live="polite"></p>
-    <div id="history-list" class="history-list"></div>
-  </section>
-
-  <!-- SETTINGS PANE -->
-  <section id="settings-pane" class="tab-pane" role="tabpanel" aria-labelledby="settings-tab" hidden>
-    <h2 class="settings-title">Your API keys</h2>
-    <p class="settings-help">Your keys take priority over Baton's configured defaults. Stored in VS Code SecretStorage and never exposed in plaintext. Remove a key to use the default.</p>
-    <form class="personal-key-form" data-provider="gemma">
-      <label for="gemma-key">Gemma (Google AI Studio)</label>
-      <span id="gemma-key-status" class="key-status">Checking…</span>
-      <input id="gemma-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Google AI Studio API key" required>
-      <div class="key-actions">
-        <button type="submit" class="btn-primary">Save key</button>
-        <button type="button" class="btn-secondary remove-key" data-provider="gemma">Remove</button>
-      </div>
-    </form>
-    <form class="personal-key-form" data-provider="elevenlabs">
-      <label for="elevenlabs-key">ElevenLabs (voice input)</label>
-      <span id="elevenlabs-key-status" class="key-status">Checking…</span>
-      <input id="elevenlabs-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your ElevenLabs API key" required>
-      <div class="key-actions">
-        <button type="submit" class="btn-primary">Save key</button>
-        <button type="button" class="btn-secondary remove-key" data-provider="elevenlabs">Remove</button>
-      </div>
-    </form>
-    <p id="settings-status" class="status-msg" role="status" aria-live="polite"></p>
-  </section>
-
-  <!-- MCP PANE -->
-  <section id="mcp-pane" class="tab-pane" role="tabpanel" aria-labelledby="mcp-tab" hidden>
-    <div class="mcp-page">
-      <div class="mcp-page-header">
-        <div class="mcp-header-info">
-          <h2 class="mcp-page-title">Model Context Protocol (MCP)</h2>
-          <p class="mcp-page-desc">Expose Baton's local context and memory tools to Cursor, Windsurf, or other MCP clients via stdio.</p>
-        </div>
-        <button id="mcp-btn" type="button" class="action-btn" title="Start or stop the Baton MCP server">Start MCP</button>
-      </div>
-
-      <div id="mcp-connection" class="mcp-connection" hidden>
-        <span class="mcp-active-dot" aria-hidden="true"></span>
-        <div class="mcp-endpoint">
-          <span class="mcp-endpoint-label">MCP active · stdio endpoint</span>
-          <code id="mcp-endpoint-value"></code>
-        </div>
-      </div>
-
-      <div class="mcp-instruction-card">
-        <h3 class="mcp-card-title">Connect an MCP client</h3>
-        <ol class="mcp-steps-list">
-          <li>Click <strong>Copy config</strong> to get the JSON configuration for your client.</li>
-          <li>Paste it into your client's MCP server configuration (e.g., <code>mcp_config.json</code>).</li>
-          <li>Restart your MCP client. Baton's local tools and task memory will be available.</li>
-        </ol>
-        <button id="mcp-copy-config" type="button" class="btn-secondary">Copy config</button>
-      </div>
-    </div>
-  </section>
-
   <!-- Friendly Toast Notifications Container -->
   <div id="toast-container" class="toast-container" aria-live="assertive" role="region" aria-label="Notifications"></div>
 
   <script nonce="{{nonce}}" src="{{actionsUri}}"></script>
-  <script nonce="{{nonce}}" src="{{historyUri}}"></script>
   <script nonce="{{nonce}}" src="{{resourcesUri}}"></script>
   <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
 </body>

@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { importDevelopmentKeys, setKeys } from './secrets';
 import { JsonStore } from './store';
-import { initializeRouter } from './router';
+import { configureRouter, initializeRouter } from './router';
+import { DEFAULT_ROUTER_SETTINGS } from './router/settings';
 import { initializeMemory, MemoryStore } from './memory';
 import { TaskHistory } from './history';
 import { initVoice } from './voice';
@@ -19,6 +20,7 @@ import { currentProjectFolder } from './project';
 export async function activate(context: vscode.ExtensionContext): Promise<{ store: JsonStore; memory: MemoryStore }> {
   await importDevelopmentKeys(context);
   const store = new JsonStore(context.globalStorageUri);
+  configureRouter((await store.loadRouterSettings()) ?? DEFAULT_ROUTER_SETTINGS);
   const memory = initializeMemory(store);
   const history = new TaskHistory(store, memory);
   const codex = new CodexRunner(store, history, context);
@@ -85,6 +87,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
     async () => {
       await newSession();
     },
+    context.secrets,
+    mcp,
+    context,
   );
 
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
