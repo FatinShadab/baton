@@ -27,6 +27,7 @@ export function classify(task: string): Route {
   else if (/\b(design|architecture|architectural|approach|plan|planning)\b/i.test(task)) taskType = 'planning';
   else if (/\b(docs?|readme|comments?|explain|summarize)\b/i.test(task)) taskType = 'docs';
   else if (/\b(debug|debugging|fix|bug|error|crash)\b/i.test(task)) taskType = 'debugging';
+  else if (/\b(feature|implement|build|create)\b/i.test(task)) taskType = 'implementation';
   else if (/\b(test|tests|testing|coverage)\b/i.test(task)) taskType = 'testing';
   else if (/\b(review|audit|inspect)\b/i.test(task)) taskType = 'review';
   else taskType = 'implementation';

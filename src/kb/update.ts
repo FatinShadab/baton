@@ -18,6 +18,8 @@ export type UpdateDeps = {
   now?: Date;
   /** Test seam: defaults to the Gemma/Ollama extractor. */
   extract?: typeof extractFacts;
+  /** Test seam: defaults to the guarded source fetcher. */
+  fetch?: typeof fetchSource;
 };
 
 export type FailedSource = { url: string; agent_id: string; error: string };
@@ -166,9 +168,17 @@ function mergePage(
       reject(`model "${name.slice(0, MAX_MODEL_NAME)}"`, `model name longer than ${MAX_MODEL_NAME} characters`);
       continue;
     }
+    const nameReason = evidenceFailure(model.name_evidence, normalizedPage);
+    if (nameReason) {
+      reject(`model "${name}"`, nameReason);
+      continue;
+    }
 
     const acceptedStrengths: ProposedFact[] = [];
     const acceptedLimits: ProposedFact[] = [];
+    const acceptedBestFor: ModelEntry['best_for'] = [];
+    const acceptedAvoidFor: ModelEntry['avoid_for'] = [];
+    const acceptedReasoning: string[] = [];
     for (const fact of model.strengths) {
       const reason = evidenceFailure(fact.evidence, normalizedPage);
       if (reason) reject(fact.text, reason);
@@ -178,6 +188,21 @@ function mergePage(
       const reason = evidenceFailure(fact.evidence, normalizedPage);
       if (reason) reject(fact.text, reason);
       else { acceptedLimits.push(fact); accepted++; }
+    }
+    for (const fact of model.best_for) {
+      const reason = evidenceFailure(fact.evidence, normalizedPage);
+      if (reason) reject(`best_for ${fact.value}`, reason);
+      else { acceptedBestFor.push(fact.value); accepted++; }
+    }
+    for (const fact of model.avoid_for) {
+      const reason = evidenceFailure(fact.evidence, normalizedPage);
+      if (reason) reject(`avoid_for ${fact.value}`, reason);
+      else { acceptedAvoidFor.push(fact.value); accepted++; }
+    }
+    for (const fact of model.reasoning_levels) {
+      const reason = evidenceFailure(fact.evidence, normalizedPage);
+      if (reason) reject(`reasoning ${fact.value}`, reason);
+      else { acceptedReasoning.push(fact.value); accepted++; }
     }
 
     const contextWindow = model.context_window
@@ -193,10 +218,13 @@ function mergePage(
       reject(model.cost_note.text, evidenceFailure(model.cost_note.evidence, normalizedPage) ?? 'invalid evidence');
     }
 
-    if (!acceptedStrengths.length && !acceptedLimits.length && !contextWindow && !costNote) {
+    if (!acceptedStrengths.length && !acceptedLimits.length && !acceptedBestFor.length
+      && !acceptedAvoidFor.length && !acceptedReasoning.length && !contextWindow && !costNote) {
       reject(`model "${name}"`, 'no evidence-backed facts for this model');
       continue;
     }
+    accepted++;
+    acceptedExamples.push(`${agentId}/${name} model name: ${name}`);
 
     accepted += (contextWindow ? 1 : 0) + (costNote ? 1 : 0);
 
@@ -244,9 +272,9 @@ function mergePage(
         acceptedExamples.push(`${agentId}/${name} cost: ${costNote.text.trim()}`);
       }
     }
-    addUnion(target.best_for, model.best_for, counters);
-    addUnion(target.avoid_for, model.avoid_for, counters);
-    addUnion(target.reasoning_levels, model.reasoning_levels, counters);
+    addUnion(target.best_for, acceptedBestFor, counters);
+    addUnion(target.avoid_for, acceptedAvoidFor, counters);
+    addUnion(target.reasoning_levels, acceptedReasoning, counters);
     target.last_verified = fetchedAt;
   }
 
@@ -331,6 +359,7 @@ export async function updateKnowledge(options: UpdateOptions, deps: UpdateDeps):
   const failedSources: FailedSource[] = [];
   let policyViolation = false;
   let pages = 0;
+  let attempted = 0;
   let accepted = 0;
   let rejected = 0;
   const counters: Counters = { added: 0, changed: 0 };
@@ -339,9 +368,11 @@ export async function updateKnowledge(options: UpdateOptions, deps: UpdateDeps):
   const extractionErrors: FailedSource[] = [];
   const next: KnowledgeBase = JSON.parse(JSON.stringify(kb)) as KnowledgeBase;
   const extractor = deps.extract ?? extractFacts;
+  const fetcher = deps.fetch ?? fetchSource;
 
   for (const entry of entries) {
-    if (pages >= MAX_PAGES) break;
+    if (attempted >= MAX_PAGES) break;
+    attempted++;
     const check = isAllowedUrl(entry.url, deps.sources.allowed_domains, deps.sources.sources.map((source) => source.url));
     if (!check.ok) {
       policyViolation = true;
@@ -349,8 +380,9 @@ export async function updateKnowledge(options: UpdateOptions, deps: UpdateDeps):
       continue;
     }
 
-    const fetched = await fetchSource(entry.url, { globalStorageUri: deps.globalStorageUri, sources: deps.sources, now });
+    const fetched = await fetcher(entry.url, { globalStorageUri: deps.globalStorageUri, sources: deps.sources, now });
     if (!fetched.ok) {
+      if (fetched.error?.startsWith('redirect blocked:')) policyViolation = true;
       failedSources.push({ url: entry.url, agent_id: entry.agent_id, error: fetched.error ?? 'fetch failed' });
       continue;
     }
@@ -499,14 +531,13 @@ export async function maybeRunDailyUpdate(context: ExtensionContext): Promise<vo
     await writeState(context, { last_attempt: today(now) });
 
     const sources = await loadSources(context);
-    const result = await updateKnowledge({}, {
+    await updateKnowledge({}, {
       extensionUri: context.extensionUri,
       globalStorageUri: context.globalStorageUri,
       sources,
       now,
     });
-    console.log(`[Baton] background knowledge update: ${result.summary.split('\n')[0]}`);
-  } catch (error) {
-    console.log(`[Baton] background knowledge update skipped: ${error instanceof Error ? error.message : String(error)}`);
+  } catch {
+    // Background refresh is silent and must not interrupt activation.
   }
 }

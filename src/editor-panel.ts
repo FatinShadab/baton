@@ -24,6 +24,7 @@ import { copyMcpConfig, serverOptions } from './mcp/config';
 import { McpSession } from './mcp/session';
 import { ensureMcpAgentInstructions } from './mcp/agents';
 import { discoverResources } from './resources';
+import { currentProject, sameProject } from './project';
 
 export class BatonEditorPanel {
   public static currentPanel: BatonEditorPanel | undefined;
@@ -113,15 +114,17 @@ export class BatonEditorPanel {
     const project = this.historyProject();
     if (!project) {
       this.activeSession = undefined;
+      this.onSessionUpdated?.();
       await this.postMessage({ type: 'projectState', hasProject: false });
       return;
     }
     const session = await this.store.getSession(sessionId);
-    if (!session) return;
+    if (!session || !sameProject(session.workspaceUri, project.uri)) return;
     this.activeSession = session;
+    this.onSessionUpdated?.();
     this.panel.title = `Baton · ${session.title.slice(0, 20)}`;
     const allTasks = (await this.store.loadTasks()) ?? [];
-    const tasks = allTasks.filter((t) => session.taskIds?.includes(t.id));
+    const tasks = allTasks.filter((t) => session.taskIds?.includes(t.id) && sameProject(t.workspaceUri, project.uri));
     await this.postMessage({
       type: 'projectState',
       hasProject: true,
@@ -139,6 +142,7 @@ export class BatonEditorPanel {
     const project = this.historyProject();
     if (!project) {
       this.activeSession = undefined;
+      this.onSessionUpdated?.();
       await this.postMessage({ type: 'projectState', hasProject: false });
       return;
     }
@@ -163,6 +167,7 @@ export class BatonEditorPanel {
     const project = this.historyProject();
     if (!project) {
       this.activeSession = undefined;
+      this.onSessionUpdated?.();
       await this.postMessage({ type: 'projectState', hasProject: false });
     } else {
       await this.postMessage({
@@ -171,8 +176,12 @@ export class BatonEditorPanel {
         projectName: project.name,
         projectUri: project.uri,
       });
-      if (!this.activeSession) {
-        await this.startNewSession();
+      if (!sameProject(this.activeSession?.workspaceUri, project.uri)) {
+        const sessions = (await this.store.loadSessions()) ?? [];
+        const latest = sessions.filter((session) => sameProject(session.workspaceUri, project.uri))
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+        if (latest) await this.loadSession(latest.id);
+        else await this.startNewSession();
       }
     }
   }
@@ -207,10 +216,7 @@ export class BatonEditorPanel {
   });
 
   private historyProject(): { uri: string; name: string } | undefined {
-    const editor = vscode.window.activeTextEditor;
-    const folder = (editor && vscode.workspace.getWorkspaceFolder(editor.document.uri))
-      ?? vscode.workspace.workspaceFolders?.find((entry) => entry.uri.scheme === 'file');
-    return folder?.uri.scheme === 'file' ? { uri: folder.uri.toString(), name: folder.name } : undefined;
+    return currentProject();
   }
 
   private async refreshHistory(): Promise<void> {
@@ -235,6 +241,10 @@ export class BatonEditorPanel {
     if (typeof message === 'object' && message !== null && 'type' in message) {
       if (message.type === 'openProject') {
         await vscode.commands.executeCommand('vscode.openFolder');
+        return;
+      }
+      if (message.type === 'baton.kb.update' || message.type === 'baton.kb.openSources') {
+        await vscode.commands.executeCommand(message.type);
         return;
       }
       if (message.type === 'checkProjectState') {
@@ -438,6 +448,7 @@ export class BatonEditorPanel {
         snippet = selectContext(collected, sources);
       }
       const workspaceUri = collected?.workspaceUri ?? this.historyProject()?.uri;
+      if (!sameProject(this.activeSession?.workspaceUri, workspaceUri)) await this.refreshProjectState();
       const { route, tier, notice } = await routeTask(message.text, snippet, workspaceUri);
       const decision = decide(route, message.text);
       const taskId = randomUUID();

@@ -97,9 +97,10 @@ export async function saveKB(context: KbContext, kb: KnowledgeBase, reason: stri
   const next = KnowledgeBaseSchema.parse({ ...kb, updated_at: now });
   const target = storageFile(context, KB_FILE);
   if (await access(target).then(() => true).catch(() => false)) await copyFile(target, storageFile(context, PREV_FILE));
+  else await writeJsonFile(storageFile(context, PREV_FILE), await loadKB(context));
 
   const changelogPath = storageFile(context, CHANGELOG_FILE);
-  const changelog = (await access(changelogPath).then(() => true).catch(() => []))
+  const changelog = (await access(changelogPath).then(() => true).catch(() => false))
     ? await readJsonFile(changelogPath, KbChangelogSchema, CHANGELOG_FILE)
     : [];
   await writeJsonFile(changelogPath, [...changelog, { time: now, reason: note }]);
@@ -132,8 +133,8 @@ export function loadSources(context: KbContext): Promise<KbSources> {
 /** Stats record schema. */
 const StatsRecordSchema = z.object({
   agent_id: z.string().min(1),
-  model: z.string().min(1),
-  task_type: z.string().min(1),
+  model: z.string().nullable(),
+  taskType: z.string().min(1),
   success: z.number().default(0),
   total: z.number().default(0),
 });
@@ -145,13 +146,9 @@ export const StatsSchema = z.array(StatsRecordSchema);
 
 /** Load stats from global storage. */
 export async function loadStats(context: KbContext): Promise<StatsRecord[]> {
-  try {
-    const raw = await readFile(storageFile(context, STATS_FILE), 'utf8');
-    const parsed = StatsSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : [];
-  } catch {
-    return [];
-  }
+  const file = storageFile(context, STATS_FILE);
+  if (!(await access(file).then(() => true).catch(() => false))) return [];
+  return readJsonFile(file, StatsSchema, STATS_FILE);
 }
 
 /** Save stats to global storage. */

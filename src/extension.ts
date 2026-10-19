@@ -9,17 +9,19 @@ import { CodexRunner } from './codex';
 import { copyMcpConfig, registerMcpProvider } from './mcp/config';
 import { McpSession } from './mcp/session';
 import { registerKbCommands } from './kb/store';
+import { registerResearchCommand } from './kb/research';
 import { registerSourceCommands } from './kb/fetch';
 import { maybeRunDailyUpdate, registerUpdateCommand } from './kb/update';
 import { SessionViewProvider } from './session-view';
 import { BatonEditorPanel } from './editor-panel';
+import { currentProjectFolder } from './project';
 
 export async function activate(context: vscode.ExtensionContext): Promise<{ store: JsonStore; memory: MemoryStore }> {
   await importDevelopmentKeys(context);
   const store = new JsonStore(context.globalStorageUri);
   const memory = initializeMemory(store);
   const history = new TaskHistory(store, memory);
-  const codex = new CodexRunner(store, history);
+  const codex = new CodexRunner(store, history, context);
   const mcp = new McpSession(context);
 
   initVoice(context.secrets);
@@ -33,15 +35,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
       codex,
       mcp,
       context.secrets,
-      () => sessionProvider.refresh(),
+      () => {
+        sessionProvider.setActiveSessionId(BatonEditorPanel.currentPanel?.getActiveSessionId());
+        void sessionProvider.refresh();
+      },
       sessionId,
     );
+    if (!sessionId) await panel.refreshProjectState();
     sessionProvider.setActiveSessionId(panel.getActiveSessionId());
     return panel;
   };
 
   const newSession = async () => {
-    const folder = vscode.workspace.workspaceFolders?.find((entry) => entry.uri.scheme === 'file');
+    const folder = currentProjectFolder();
     if (!folder) {
       const choice = await vscode.window.showInformationMessage(
         'Please open or create a project folder first before creating tasks.',
@@ -52,6 +58,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
       }
       return;
     }
+    const alreadyOpen = Boolean(BatonEditorPanel.currentPanel);
     const panel = await BatonEditorPanel.createOrShow(
       context.extensionUri,
       store,
@@ -59,9 +66,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
       codex,
       mcp,
       context.secrets,
-      () => sessionProvider.refresh(),
+      () => {
+        sessionProvider.setActiveSessionId(BatonEditorPanel.currentPanel?.getActiveSessionId());
+        void sessionProvider.refresh();
+      },
     );
-    await panel.startNewSession();
+    if (alreadyOpen) await panel.startNewSession();
     sessionProvider.setActiveSessionId(panel.getActiveSessionId());
     await sessionProvider.refresh();
   };
@@ -93,6 +103,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
     vscode.commands.registerCommand('baton.setKeys', () => setKeys(context.secrets)),
     vscode.commands.registerCommand('baton.copyMcpConfig', () => copyMcpConfig(context)),
     ...registerKbCommands(context),
+    ...registerResearchCommand(context),
     ...registerSourceCommands(context),
     ...registerUpdateCommand(context),
     vscode.commands.registerCommand('baton.focus', async () => {
@@ -114,6 +125,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
 
   const editorListener = vscode.window.onDidChangeActiveTextEditor(() => {
     void sessionProvider.refresh();
+    void BatonEditorPanel.currentPanel?.refreshProjectState();
   });
   const workspaceListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
     void sessionProvider.refresh();

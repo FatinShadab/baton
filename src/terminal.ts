@@ -35,7 +35,7 @@ function quote(value: string): string {
   return WINDOWS ? `'${value.replace(/'/g, "''")}'` : `'${value.replace(/'/g, "'\"'\"'")}'`;
 }
 
-export async function preparePrompt(prompt: string): Promise<{ command: string; cleanup: () => Promise<void> }> {
+export async function preparePrompt(prompt: string, model?: string): Promise<{ command: string; cleanup: () => Promise<void> }> {
   const directory = await mkdtemp(path.join(tmpdir(), 'baton-codex-'));
   const filename = path.join(directory, 'prompt.txt');
   const cleanup = async () => {
@@ -46,13 +46,14 @@ export async function preparePrompt(prompt: string): Promise<{ command: string; 
     await writeFile(filename, prompt, { encoding: 'utf8', mode: 0o600, signal: AbortSignal.timeout(5000) });
     const file = quote(filename);
     const dir = quote(directory);
+    const modelArg = model ? ` --model ${quote(model)}` : '';
     const command = WINDOWS
       ? `$ErrorActionPreference = 'Stop'; $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ` +
-        `try { ${RESOLVE_CODEX}Get-Content -LiteralPath ${file} -Raw -Encoding UTF8 | & $batonCodex.Source exec --sandbox workspace-write -; ` +
+        `try { ${RESOLVE_CODEX}Get-Content -LiteralPath ${file} -Raw -Encoding UTF8 | & $batonCodex.Source exec${modelArg} --sandbox workspace-write -; ` +
         `$batonExit = $LASTEXITCODE } catch { Write-Host $_; $batonExit = 1 } finally { ` +
         `Remove-Item -LiteralPath ${file} -Force -ErrorAction SilentlyContinue; ` +
         `Remove-Item -LiteralPath ${dir} -ErrorAction SilentlyContinue }; exit $batonExit`
-      : `trap ${quote(`rm -f -- ${file}; rmdir -- ${dir}`)} EXIT; codex exec --sandbox workspace-write "$(cat ${file})"`;
+      : `trap ${quote(`rm -f -- ${file}; rmdir -- ${dir}`)} EXIT; codex exec${modelArg} --sandbox workspace-write "$(cat ${file})"`;
     return { command, cleanup };
   } catch (error) {
     await cleanup();

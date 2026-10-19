@@ -116,6 +116,18 @@
           </div>
         </div>
 
+        <div id="context-preview" class="context-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="context-preview-title" hidden>
+          <div class="context-preview-panel">
+            <h2 id="context-preview-title">Review project context</h2>
+            <p id="context-preview-status">Choose what Baton may use for this task.</p>
+            <div id="context-preview-list" class="context-preview-list"></div>
+            <div class="context-preview-actions">
+              <button id="context-preview-cancel" type="button" class="btn-secondary">Cancel</button>
+              <button id="context-preview-route" type="button" class="btn-primary">Route task</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Floating Prompt Dock (Centered directly under chat stream) -->
         <div class="dock-container">
           <form id="task-form" class="floating-prompt-dock">

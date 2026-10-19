@@ -81,7 +81,7 @@ export type RouterTier = 'gemma' | 'ollama' | 'rules';
 export type RouterResult = { route: Route; tier: RouterTier; notice?: string };
 export type ExtensionMessage =
   | { type: 'contextPreview'; requestId: number; parts: ContextPart[]; limit: number }
-  | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean; notice?: string }
+  | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean; notice?: string; contextSnippet?: string; contextParts?: ContextPart[] }
   | { type: 'routeError'; requestId: number }
   | { type: 'resourcesSearching'; taskId: string; query: string }
   | { type: 'resourcesReady'; resources: TaskResourcesResult };
@@ -100,9 +100,17 @@ import { z } from 'zod';
 export const RouteSchema = z.object({
   task_type: z.enum(['research', 'planning', 'implementation', 'debugging', 'testing', 'review', 'docs']),
   risk_tier: z.enum(['low', 'moderate', 'high']),
-  recommended_destination: z.enum(['codex', 'chatgpt_web', 'gemini_web']),
+  recommended_destination: z.enum(['codex', 'antigravity', 'copilot', 'chatgpt_web', 'gemini_web']),
   research_needed: z.boolean(),
   reason: z.string().max(200),
+  recommended_model: z.string().nullable().optional(),
+  model_reasoning: z.enum(['low', 'medium', 'high', 'default']).nullable().optional(),
+  kb_refs: z.array(z.string()).optional(),
+  kb_stale: z.boolean().optional(),
+  kb_unverified: z.boolean().optional(),
+  kb_docs_verified: z.boolean().optional(),
+  kb_note: z.string().nullable().optional(),
+  kb_claims: z.array(z.object({ text: z.string(), source_url: z.string().url(), origin: z.enum(['docs', 'manual', 'seed']) })).optional(),
 });
 export type Route = z.infer<typeof RouteSchema>;
 
@@ -119,6 +127,11 @@ export const TaskRecordSchema = z.object({
   changedFiles: z.array(z.string()).optional(),
   workspaceUri: z.string().optional(),
   contextSnippet: z.string().max(6000).optional(),
+  recommended_model: z.string().nullable().optional(),
+  model_reasoning: z.enum(['low', 'medium', 'high', 'default']).nullable().optional(),
+  kb_refs: z.array(z.string()).optional(),
+  kb_stale: z.boolean().optional(),
+  kb_note: z.string().nullable().optional(),
   approvals: z.array(z.object({ approvedAt: z.string().datetime(), workspaceUri: z.string() })).optional(),
 });
 export type TaskRecord = z.infer<typeof TaskRecordSchema>;
@@ -135,6 +148,11 @@ export const SessionTurnSchema = z.object({
   plan: z.string().optional(),
   status: z.enum(['routed', 'planned', 'running', 'done', 'blocked']).optional(),
   outcome: z.string().optional(),
+  contextSnippet: z.string().max(6000).optional(),
+  why: z.string().optional(),
+  overrode: z.boolean().optional(),
+  recommended_model: z.string().nullable().optional(),
+  model_reasoning: z.enum(['low', 'medium', 'high', 'default']).nullable().optional(),
 });
 export type SessionTurn = z.infer<typeof SessionTurnSchema>;
 
@@ -160,13 +178,14 @@ export type StatsRecord = z.infer<typeof StatsRecordSchema>;
 
 export type SessionViewMessage =
   | { type: 'loadSessions' }
+  | { type: 'openProject' }
   | { type: 'newSession' }
   | { type: 'selectSession'; sessionId: string }
   | { type: 'deleteSession'; sessionId: string };
 
 export function isSessionViewMessage(message: unknown): message is SessionViewMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
-  if (message.type === 'loadSessions' || message.type === 'newSession') return true;
+  if (message.type === 'loadSessions' || message.type === 'newSession' || message.type === 'openProject') return true;
   if ((message.type === 'selectSession' || message.type === 'deleteSession')
     && 'sessionId' in message && typeof message.sessionId === 'string' && message.sessionId.length > 0) {
     return true;

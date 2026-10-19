@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
   dedupeAvailability,
+  normalizedAvailabilityKey,
   researchAgents,
   ResearchInput,
   selectAvailabilityGroups,
@@ -289,6 +290,7 @@ async function reportRealAvailability(storageRoot: string): Promise<void> {
 
 async function main(): Promise<boolean> {
   const storageRoot = await mkdtemp(path.join(tmpdir(), 'baton-kb-query-'));
+  const aliasesByCandidate = new Map<string, string>();
   console.log('showCandidates (debug table) — FAKE KB test data only.');
   console.log(`task chars: ${longTask.length}; availability rows: ${availability.models.length}; storage: ${storageRoot}`);
   try {
@@ -302,6 +304,22 @@ async function main(): Promise<boolean> {
       const risk = entry.input.riskTier ?? '-';
       console.log(`\n#${index + 1} ${entry.label} | type=${entry.input.taskType ?? '-'} risk=${risk} | ${candidates.length} candidate(s)`);
       showCandidates(candidates);
+      const keys = candidates.map((candidate) => `${candidate.agent_id}\u0000${normalizedAvailabilityKey(candidate.model ?? '')}`);
+      const counts = new Map<string, number>();
+      for (const candidate of candidates) counts.set(candidate.agent_id, (counts.get(candidate.agent_id) ?? 0) + 1);
+      const aliasDifferences: string[] = [];
+      for (const [candidateIndex, candidate] of candidates.entries()) {
+        const key = keys[candidateIndex];
+        const aliases = JSON.stringify(candidate.aliases);
+        const previous = aliasesByCandidate.get(key);
+        if (previous !== undefined && previous !== aliases) aliasDifferences.push(`${candidate.agent_id}/${candidate.model ?? '-'}: ${previous} vs ${aliases}`);
+        aliasesByCandidate.set(key, aliases);
+      }
+      const label = `#${index + 1} ${entry.label}`;
+      check(`${label} unique candidate keys`, new Set(keys).size === keys.length, `${new Set(keys).size}/${keys.length} unique`);
+      const cap = entry.input.perAgentCap ?? 3;
+      check(`${label} per-agent cap`, [...counts.values()].every((count) => count <= cap), `cap=${cap} counts=${JSON.stringify(Object.fromEntries(counts))}`);
+      check(`${label} stable aliases`, aliasDifferences.length === 0, aliasDifferences.join('; ') || 'aliases match earlier tasks');
     }
 
     console.log('\nchecks');

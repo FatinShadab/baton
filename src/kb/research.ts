@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { z } from 'zod';
+import type { Disposable, ExtensionContext } from 'vscode';
+import { classify } from '../router/rules';
+import { loadAvailability, loadKB } from './store';
 import type {
   AgentEntry,
   Availability,
@@ -33,6 +36,7 @@ export type Candidate = {
   aliases: string[];
   /** Computed, never stored in the KB: true only when Baton has a launch adapter. */
   dispatchable: boolean;
+  reasoning_levels: string[];
 };
 
 /** One availability entry after collapsing duplicate spellings. */
@@ -159,14 +163,21 @@ function isStale(lastVerified: string | null, now: Date): boolean {
   return !Number.isFinite(time) || now.getTime() - time > STALE_DAYS * DAY_MS;
 }
 
-/** Missing, unreadable, or malformed stats simply mean "no nudge". */
+/** Missing stats mean "no nudge"; malformed data names the file for the caller. */
 async function loadStats(dir: string): Promise<StatRecord[]> {
+  let raw: string;
   try {
-    const raw = await readFile(path.join(dir, STATS_FILE), 'utf8');
+    raw = await readFile(path.join(dir, STATS_FILE), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw new Error(`Could not read ${STATS_FILE}`);
+  }
+  try {
     const parsed = StatsSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : [];
+    if (!parsed.success) throw new Error('Invalid stats schema');
+    return parsed.data;
   } catch {
-    return [];
+    throw new Error(`Invalid JSON or data in ${STATS_FILE}`);
   }
 }
 
@@ -227,6 +238,7 @@ function scoreCandidate(
       claim_ids: claimIds,
       aliases: [],
       dispatchable,
+      reasoning_levels: [],
     };
   }
 
@@ -245,6 +257,7 @@ function scoreCandidate(
       claim_ids: [],
       aliases: [...group.aliases],
       dispatchable,
+      reasoning_levels: [],
     };
   }
 
@@ -303,6 +316,7 @@ function scoreCandidate(
     claim_ids: claimIds,
     aliases: [...group.aliases],
     dispatchable,
+    reasoning_levels: [...model.reasoning_levels],
   };
 }
 
@@ -332,26 +346,21 @@ export async function researchAgents(input: ResearchInput, deps: ResearchDeps): 
     const agent = agentById.get(agentId);
     const agentRank = agentOrder.get(agentId) ?? 0;
 
-    // No model knowledge at all: still surface every available agent.
-    if (deps.kb.models.length === 0) {
-      const candidate = scoreCandidate(agentId, agent, null, null, input, taskWords, stats, now);
-      candidate.score = 0;
-      candidate.why.unshift(NO_DATA_WHY);
-      ranked.push({ candidate, order: agentRank });
-      continue;
-    }
-
     const groups = selectAvailabilityGroups(groupsByAgent.get(agentId) ?? []);
     if (groups.length === 0) {
+      const candidate = scoreCandidate(agentId, agent, null, null, input, taskWords, stats, now);
+      if (deps.kb.models.length === 0) candidate.why.unshift(NO_DATA_WHY);
       ranked.push({
-        candidate: scoreCandidate(agentId, agent, null, null, input, taskWords, stats, now),
+        candidate,
         order: agentRank,
       });
       continue;
     }
     for (const group of groups) {
+      const candidate = scoreCandidate(agentId, agent, group, matchModel(deps.kb, agentId, group.name) ?? null, input, taskWords, stats, now);
+      if (deps.kb.models.length === 0) candidate.why.unshift(NO_DATA_WHY);
       ranked.push({
-        candidate: scoreCandidate(agentId, agent, group, matchModel(deps.kb, agentId, group.name) ?? null, input, taskWords, stats, now),
+        candidate,
         order: group.order,
       });
     }
@@ -372,4 +381,23 @@ export async function researchAgents(input: ResearchInput, deps: ResearchDeps): 
     if (result.length >= topN) break;
   }
   return result;
+}
+
+export function registerResearchCommand(context: ExtensionContext): Disposable[] {
+  const vscode = require('vscode') as typeof import('vscode');
+  return [vscode.commands.registerCommand('baton.kb.showCandidates', async () => {
+    try {
+      const task = await vscode.window.showInputBox({ prompt: 'Task to research against available agents and models' });
+      if (!task?.trim()) return;
+      const [kb, availability] = await Promise.all([loadKB(context), loadAvailability(context)]);
+      const candidates = await researchAgents({ task, taskType: classify(task).task_type },
+        { kb, availability, globalStorageUri: context.globalStorageUri });
+      const document = await vscode.workspace.openTextDocument({
+        language: 'json', content: JSON.stringify(candidates, null, 2),
+      });
+      await vscode.window.showTextDocument(document);
+    } catch (error) {
+      void vscode.window.showErrorMessage(`Baton could not show candidates: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  })];
 }

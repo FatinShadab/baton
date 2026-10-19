@@ -56,6 +56,14 @@
       {
         "command": "baton.kb.update",
         "title": "Baton: Update Knowledge"
+      },
+      {
+        "command": "baton.kb.showCandidates",
+        "title": "Baton: Show Knowledge Base Candidates"
+      },
+      {
+        "command": "baton.kb.resetStats",
+        "title": "Baton: Reset Stats"
       }
     ],
     "viewsContainers": {

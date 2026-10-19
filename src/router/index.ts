@@ -116,7 +116,7 @@ function normalizeModelName(value: string | null | undefined): string | null {
   return value ? value.trim().toLowerCase() : null;
 }
 
-async function researchForRoute(task: string, route: Route): Promise<{ kb: KnowledgeBase; candidates: Candidate[] } | undefined> {
+async function researchForRoute(task: string, route: Route): Promise<{ kb: KnowledgeBase; candidates: Candidate[] } | { error: string } | undefined> {
   if (!kbContext) return undefined;
   try {
     const [kb, availability] = await Promise.all([loadKB(kbContext), loadAvailability(kbContext)]);
@@ -127,9 +127,9 @@ async function researchForRoute(task: string, route: Route): Promise<{ kb: Knowl
       topN: 5,
     }, { kb, availability, globalStorageUri: kbContext.globalStorageUri });
     return { kb, candidates };
-  } catch {
+  } catch (error) {
     // KB failures never block routing.
-    return undefined;
+    return { error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -159,6 +159,8 @@ async function chooseModel(
     if (!chosen || !isCodingDestination(choice.agent_id)) return undefined;
     const knownClaims = new Set(chosen.claim_ids);
     if (choice.claim_ids.some((id) => !knownClaims.has(id))) return undefined;
+    if (choice.reasoning && choice.reasoning !== 'default'
+      && !chosen.reasoning_levels.includes(choice.reasoning)) return undefined;
     return { choice, candidate: chosen, destination: choice.agent_id };
   } catch {
     return undefined;
@@ -207,11 +209,17 @@ export async function routeTask(task: string, ctxSnippet: string, workspaceUri =
     model_reasoning: null,
     kb_refs: [],
     kb_stale: false,
+    kb_unverified: false,
+    kb_docs_verified: false,
     kb_note: null,
+    kb_claims: [],
   };
 
   // Research runs for every route; only coding destinations consume candidates.
-  const snapshot = task.trim() ? await researchForRoute(task, route) : undefined;
+  const researched = task.trim() ? await researchForRoute(task, route) : undefined;
+  const snapshot = researched && 'kb' in researched ? researched : undefined;
+  if (researched && 'error' in researched) route.kb_note = researched.error;
+  let selectedCandidate: Candidate | undefined;
   if (isCodingDestination(route.recommended_destination) && task.trim()) {
     const codingCandidates = snapshot
       ? snapshot.candidates.filter((candidate) => isCodingDestination(candidate.agent_id))
@@ -220,6 +228,7 @@ export async function routeTask(task: string, ctxSnippet: string, workspaceUri =
     if (snapshot && codingCandidates.length > 0) {
       const top = codingCandidates[0];
       if (snapshot.kb.models.length === 0) {
+        selectedCandidate = top;
         route = {
           ...withKbFallback(route, top),
           recommended_model: top.model,
@@ -228,6 +237,7 @@ export async function routeTask(task: string, ctxSnippet: string, workspaceUri =
           kb_note: NO_MODEL_DATA,
         };
       } else if (tier === 'rules') {
+        selectedCandidate = top;
         route = {
           ...withKbFallback(route, top),
           recommended_model: top.model,
@@ -237,6 +247,7 @@ export async function routeTask(task: string, ctxSnippet: string, workspaceUri =
       } else {
         const chosen = await chooseModel(task, route, codingCandidates);
         if (chosen) {
+          selectedCandidate = chosen.candidate;
           route = {
             ...route,
             recommended_destination: chosen.destination,
@@ -247,6 +258,7 @@ export async function routeTask(task: string, ctxSnippet: string, workspaceUri =
             kb_note: chosen.choice.reason,
           };
         } else {
+          selectedCandidate = top;
           route = {
             ...withKbFallback(route, top),
             recommended_model: top.model,
@@ -257,6 +269,35 @@ export async function routeTask(task: string, ctxSnippet: string, workspaceUri =
         }
       }
     }
+  }
+
+  if (snapshot && selectedCandidate) {
+    const refs = new Set(route.kb_refs ?? []);
+    const claims = [
+      ...snapshot.kb.agents.flatMap((agent) => [...agent.strengths, ...agent.limits]),
+      ...snapshot.kb.models.flatMap((model) => [
+        ...model.strengths, ...model.limits,
+        ...(model.context_window ? [model.context_window] : []),
+        ...(model.cost_note ? [model.cost_note] : []),
+      ]),
+    ];
+    route.kb_unverified = selectedCandidate.unverified;
+    route.kb_claims = claims.filter((claim) => refs.has(claim.id))
+      .map(({ text, source_url, origin }) => ({ text, source_url, origin }));
+    const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const agent = snapshot.kb.agents.find((entry) => entry.id === selectedCandidate.agent_id);
+    const model = snapshot.kb.models.find((entry) => entry.agent_id === selectedCandidate.agent_id
+      && selectedCandidate.model && key(entry.name) === key(selectedCandidate.model));
+    route.kb_docs_verified = [
+      ...(agent?.strengths ?? []), ...(agent?.limits ?? []),
+      ...(model?.strengths ?? []), ...(model?.limits ?? []),
+      ...(model?.context_window ? [model.context_window] : []),
+      ...(model?.cost_note ? [model.cost_note] : []),
+    ].some((claim) => claim.origin === 'docs');
+  }
+  if (route.recommended_destination === 'copilot') {
+    route.recommended_model = null;
+    route.model_reasoning = null;
   }
 
   const result: RouterResult = { route, tier, notice };

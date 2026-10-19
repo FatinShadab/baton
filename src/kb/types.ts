@@ -81,7 +81,7 @@ export const AvailabilitySchema = z.object({
   agents: z.array(z.string().min(1)),
   models: z.array(z.object({
     agent_id: z.string().min(1),
-    name: z.string().min(1),
+    name: z.string(),
     /** Omitted entries are concrete models; aliases/modes only surface as a fallback. */
     kind: AvailabilityKindSchema,
   })),

@@ -14,6 +14,7 @@ Given a developer's coding task and context, identify the core technical subject
 Rules:
 - Keep each query focused and concise (3-6 technical words).
 - Avoid generic filler words or conversational phrases.
+- Use the language and framework shown in project context; treat local filenames as code files, not product names.
 - Respond with JSON ONLY in this exact structure:
 {
   "tool_calls": [
@@ -37,7 +38,8 @@ export async function planResearchWithGemma(
   if (!apiKey) return undefined;
 
   return withinDeadline(async (signal) => {
-    const prompt = `Developer Task: "${task}"\nContext Excerpt: ${ctxSnippet.slice(0, 300)}`;
+    const fileHint = /\b[A-Za-z0-9_.-]+\.py\b/i.test(task) ? 'Python source file' : '';
+    const prompt = `Developer Task: "${task}"\nFile Hint: ${fileHint}\nContext Excerpt: ${ctxSnippet.slice(0, 300)}`;
     const request = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },

@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import { search } from './memory';
+import { currentProjectFolder } from './project';
 
 const MAX_FILE_BYTES = 100 * 1024;
 export const MAX_CONTEXT_CHARS = 6000;
@@ -59,30 +60,40 @@ export function selectContext(context: BuiltContext, sources: string[]): string 
 /** Collect locally; parts preserve source boundaries for the sharing preview. */
 export async function buildContext(task: string): Promise<BuiltContext> {
   const parts: ContextPart[] = [];
+  const includedFiles = new Set<string>();
   const add = (source: string, content: string) => {
     if (content) parts.push({ source, text: `--- ${source} ---\n${content}` });
   };
   const editor = vscode.window.activeTextEditor;
-  const folder = (editor && vscode.workspace.getWorkspaceFolder(editor.document.uri))
-    ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = currentProjectFolder();
   try {
     if (folder?.uri.scheme === 'file') {
       const root = await realpath(folder.uri.fsPath);
-      const readme = await safeFile(path.join(root, 'README.md'), root);
-      if (readme) {
-        try {
-          const content = await readFile(readme, { encoding: 'utf8', signal: AbortSignal.timeout(3000) });
-          if (Buffer.byteLength(content, 'utf8') <= MAX_FILE_BYTES) {
-            add(`${folder.name}/README.md`, content.slice(0, 3000));
-          }
-        } catch { /* Missing or unreadable README is optional. */ }
+      const mentioned = [...new Set(task.match(/\b[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:py|ts|tsx|js|jsx|json|html|css|md|go|rs|java|sh|yaml|yml)\b/gi) ?? [])]
+        .filter(allowed).slice(0, 3);
+      for (const name of mentioned) {
+        const matches = await Promise.resolve(vscode.workspace.findFiles(`**/${name}`, '**/{.git,node_modules}/**', 5)).catch(() => [] as vscode.Uri[]);
+        for (const uri of matches) {
+          const owner = vscode.workspace.getWorkspaceFolder(uri);
+          if (!owner || owner.uri.scheme !== 'file') continue;
+          const ownerRoot = await realpath(owner.uri.fsPath).catch(() => undefined);
+          if (!ownerRoot) continue;
+          const file = await safeFile(uri.fsPath, ownerRoot);
+          if (!file || includedFiles.has(file)) continue;
+          try {
+            const content = editor?.document.uri.fsPath === uri.fsPath
+              ? editor.document.getText()
+              : await readFile(file, { encoding: 'utf8', signal: AbortSignal.timeout(3000) });
+            if (Buffer.byteLength(content, 'utf8') <= MAX_FILE_BYTES) {
+              add(`${owner.name}/${path.relative(ownerRoot, file)}`, content.slice(0, 3500));
+              includedFiles.add(file);
+            }
+          } catch { /* A named file may disappear while collecting context. */ }
+        }
       }
-      const [status, diff] = await Promise.all([gitSummary(root, 'status'), gitSummary(root, 'diff')]);
-      add(`${folder.name}: git status --short`, status);
-      add(`${folder.name}: git diff --stat`, diff);
       if (editor?.document.uri.scheme === 'file') {
         const file = await safeFile(editor.document.uri.fsPath, root);
-        if (file) {
+        if (file && !includedFiles.has(file)) {
           const document = editor.document;
           // Also check unsaved editor content before selecting a snippet.
           if (Buffer.byteLength(document.getText(), 'utf8') <= MAX_FILE_BYTES) {
@@ -91,9 +102,23 @@ export async function buildContext(task: string): Promise<BuiltContext> {
               : editor.selection;
             const excerpt = document.getText(range);
             add(`${file} (${editor.selection.isEmpty ? 'first 150 lines' : 'selection'})`, excerpt);
+            includedFiles.add(file);
           }
         }
       }
+      const readme = await safeFile(path.join(root, 'README.md'), root);
+      if (readme && !includedFiles.has(readme)) {
+        try {
+          const content = await readFile(readme, { encoding: 'utf8', signal: AbortSignal.timeout(3000) });
+          if (Buffer.byteLength(content, 'utf8') <= MAX_FILE_BYTES) add(`${folder.name}/README.md`, content.slice(0, 3000));
+        } catch { /* Missing or unreadable README is optional. */ }
+      }
+      const files = await Promise.resolve(vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*'), '**/{.git,node_modules}/**', 120)).catch(() => [] as vscode.Uri[]);
+      const names = files.map((uri) => path.relative(root, uri.fsPath)).filter(allowed).slice(0, 80);
+      add(`${folder.name}: project files`, names.join('\n'));
+      const [status, diff] = await Promise.all([gitSummary(root, 'status'), gitSummary(root, 'diff')]);
+      add(`${folder.name}: git status --short`, status);
+      add(`${folder.name}: git diff --stat`, diff);
     }
   } catch { /* Workspace failures must not prevent routing. */ }
   try {

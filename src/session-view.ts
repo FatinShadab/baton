@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
 import { JsonStore } from './store';
 import { isSessionViewMessage, SessionRecord } from './types';
+import { currentProject, sameProject } from './project';
 
 export class SessionViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'baton.sessions';
@@ -27,16 +28,16 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
   public async refresh(): Promise<void> {
     if (!this.view) return;
     try {
-      const workspace = this.currentWorkspace();
+      const workspace = currentProject();
       const allSessions = (await this.store.loadSessions()) ?? [];
       const sessions = workspace
-        ? allSessions.filter((s) => s.workspaceUri === workspace.uri)
+        ? allSessions.filter((s) => sameProject(s.workspaceUri, workspace.uri))
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         : [];
       await this.view.webview.postMessage({
         type: 'sessionsList',
         sessions,
-        activeSessionId: this.activeSessionId,
+        activeSessionId: sessions.some((session) => session.id === this.activeSessionId) ? this.activeSessionId : undefined,
         project: workspace ? { name: workspace.name, uri: workspace.uri } : undefined,
       });
     } catch {
@@ -77,16 +78,22 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
         } else if (message.type === 'openProject') {
           await vscode.commands.executeCommand('vscode.openFolder');
         } else if (message.type === 'selectSession') {
-          this.activeSessionId = message.sessionId;
+          const project = currentProject();
+          const session = await this.store.getSession(message.sessionId);
+          if (!project || !sameProject(session?.workspaceUri, project.uri)) { await this.refresh(); return; }
           await this.onSelectSession(message.sessionId);
+          this.activeSessionId = message.sessionId;
           await this.postActiveSession();
         } else if (message.type === 'newSession') {
-          if (!this.currentWorkspace()) {
+          if (!currentProject()) {
             void vscode.window.showWarningMessage('Please open or create a project first before creating tasks.');
             return;
           }
           await this.onNewSession();
         } else if (message.type === 'deleteSession') {
+          const project = currentProject();
+          const session = await this.store.getSession(message.sessionId);
+          if (!project || !sameProject(session?.workspaceUri, project.uri)) { await this.refresh(); return; }
           await this.store.deleteSession(message.sessionId);
           if (this.activeSessionId === message.sessionId) {
             this.activeSessionId = undefined;
@@ -119,10 +126,4 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private currentWorkspace(): { uri: string; name: string } | undefined {
-    const editor = vscode.window.activeTextEditor;
-    const folder = (editor && vscode.workspace.getWorkspaceFolder(editor.document.uri))
-      ?? vscode.workspace.workspaceFolders?.find((entry) => entry.uri.scheme === 'file');
-    return folder?.uri.scheme === 'file' ? { uri: folder.uri.toString(), name: folder.name } : undefined;
-  }
 }

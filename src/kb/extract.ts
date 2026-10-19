@@ -16,11 +16,12 @@ Return one JSON object with exactly this shape:
   "models": [
     {
       "name": string,
+      "name_evidence": string,
       "strengths": [{ "text": string, "evidence": string }],
       "limits": [{ "text": string, "evidence": string }],
-      "best_for": [task type],
-      "avoid_for": [task type],
-      "reasoning_levels": [string],
+      "best_for": [{ "value": task type, "evidence": string }],
+      "avoid_for": [{ "value": task type, "evidence": string }],
+      "reasoning_levels": [{ "value": string, "evidence": string }],
       "context_window": { "text": string, "evidence": string } | null,
       "cost_note": { "text": string, "evidence": string } | null
     }
@@ -44,13 +45,16 @@ const FactSchema = z.object({
   text: z.string().min(1).max(200),
   evidence: z.string().min(1).max(300),
 });
+const TaskTypeFactSchema = z.object({ value: TaskTypeSchema, evidence: z.string().min(1).max(300) });
+const ReasoningFactSchema = z.object({ value: z.string().min(1), evidence: z.string().min(1).max(300) });
 const ModelProposalSchema = z.object({
   name: z.string().min(1).max(120),
+  name_evidence: z.string().min(1).max(300),
   strengths: z.array(FactSchema).default([]),
   limits: z.array(FactSchema).default([]),
-  best_for: z.array(TaskTypeSchema).default([]),
-  avoid_for: z.array(TaskTypeSchema).default([]),
-  reasoning_levels: z.array(z.string().min(1)).default([]),
+  best_for: z.array(TaskTypeFactSchema).default([]),
+  avoid_for: z.array(TaskTypeFactSchema).default([]),
+  reasoning_levels: z.array(ReasoningFactSchema).default([]),
   context_window: FactSchema.nullable().default(null),
   cost_note: FactSchema.nullable().default(null),
 });
@@ -93,9 +97,9 @@ function mergeModels(target: ProposedModel[], incoming: ProposedModel[]): void {
     }
     existing.strengths.push(...model.strengths);
     existing.limits.push(...model.limits);
-    for (const taskType of model.best_for) if (!existing.best_for.includes(taskType)) existing.best_for.push(taskType);
-    for (const taskType of model.avoid_for) if (!existing.avoid_for.includes(taskType)) existing.avoid_for.push(taskType);
-    for (const level of model.reasoning_levels) if (!existing.reasoning_levels.includes(level)) existing.reasoning_levels.push(level);
+    for (const fact of model.best_for) if (!existing.best_for.some((entry) => entry.value === fact.value)) existing.best_for.push(fact);
+    for (const fact of model.avoid_for) if (!existing.avoid_for.some((entry) => entry.value === fact.value)) existing.avoid_for.push(fact);
+    for (const fact of model.reasoning_levels) if (!existing.reasoning_levels.some((entry) => entry.value === fact.value)) existing.reasoning_levels.push(fact);
     existing.context_window ??= model.context_window;
     existing.cost_note ??= model.cost_note;
   }

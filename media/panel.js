@@ -23,6 +23,12 @@
   const sessionChip = document.getElementById('session-chip');
   const heroState = document.getElementById('hero-state');
   const chatMessages = document.getElementById('chat-messages');
+  const chatScrollArea = document.querySelector('.chat-scroll-area');
+  const contextPreview = document.getElementById('context-preview');
+  const contextPreviewList = document.getElementById('context-preview-list');
+  const contextPreviewStatus = document.getElementById('context-preview-status');
+  const contextPreviewCancel = document.getElementById('context-preview-cancel');
+  const contextPreviewRoute = document.getElementById('context-preview-route');
   const toggleResearchBtn = document.getElementById('toggle-research-btn');
   const closeResearchBtn = document.getElementById('close-research-btn');
   const researchSidebar = document.getElementById('research-sidebar');
@@ -49,6 +55,7 @@
   });
 
   let requestId = 0;
+  let pendingPreview = null;
   let hasProject = true;
   let activePlanTextarea = null;
   const selected = new Set();
@@ -61,11 +68,16 @@
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
-      .replace(/&/g, '&')
-      .replace(/</g, '<')
-      .replace(/>/g, '>')
-      .replace(/\"/g, '"')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  function scrollChatToBottom() {
+    if (!chatScrollArea) return;
+    requestAnimationFrame(() => chatScrollArea.scrollTo({ top: chatScrollArea.scrollHeight, behavior: 'smooth' }));
   }
 
   function setSubmitButtonState(state = 'route', busy = false) {
@@ -265,41 +277,31 @@
   // ---------------------------------------------------------------------------
   // KB & Recommendation Handlers
   // ---------------------------------------------------------------------------
-  function populateWhySection(route) {
-    const whyTextEl = document.getElementById('why-text');
-    const whySourcesEl = document.getElementById('why-sources');
-    if (!whyTextEl || !whySourcesEl) return;
-
-    // Populate claim texts with source links
-    let whyText = '';
-    let whySources = '';
-
-    if (route.kb_refs && route.kb_refs.length > 0) {
-      whyText = 'The following knowledge base claims support this recommendation:\n\n';
-      route.kb_refs.forEach((ref, i) => {
-        const refNum = i + 1;
-        whyText += `${refNum}. ${escapeHtml(ref)}\n\n`;
-      });
-    } else {
-      whyText = 'No specific knowledge base claims found for this recommendation.';
-    }
-
-    whyTextEl.textContent = whyText;
-
-    // Add source links if available
-    if (route.kb_refs && route.kb_refs.length > 0) {
-      whySourcesEl.innerHTML = '';
-      route.kb_refs.forEach((ref, i) => {
-        const refNum = i + 1;
+  function populateWhySection(section, route) {
+    const whyTextEl = section.querySelector('.why-text');
+    const whySourcesEl = section.querySelector('.why-sources');
+    const claims = route.kb_claims || [];
+    const codingRoute = ['codex', 'antigravity', 'copilot'].includes(route.recommended_destination);
+    whyTextEl.textContent = [
+      route.reason ? `Router: ${route.reason}` : '',
+      claims.length
+        ? claims.map((claim, i) => `${i + 1}. ${claim.text}`).join('\n')
+        : codingRoute
+          ? 'No verified knowledge-base claims support this model yet. Refresh knowledge to check the listed sources.'
+          : 'This web destination was chosen by the router; model knowledge-base claims do not apply.',
+    ].filter(Boolean).join('\n\n');
+    claims.forEach((claim, i) => {
+      try {
+        const url = new URL(claim.source_url);
+        if (url.protocol !== 'https:') return;
         const link = document.createElement('a');
-        link.href = ref;
-        link.textContent = `Source ${refNum}`;
+        link.href = url.href;
+        link.textContent = `Source ${i + 1}`;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
-        whySourcesEl.appendChild(link);
-        whySourcesEl.appendChild(document.createTextNode('\n '));
-      });
-    }
+        whySourcesEl.append(link, document.createTextNode(' '));
+      } catch { /* Invalid source URL is not linked. */ }
+    });
   }
 
   function handleRefreshKB() {
@@ -310,20 +312,6 @@
   function handleOpenSources() {
     vscode.postMessage({ type: 'baton.kb.openSources' });
   }
-
-  // Add event listeners for the new buttons
-  document.addEventListener('DOMContentLoaded', () => {
-    const refreshBtn = document.querySelector('.refresh-kb');
-    const openSourcesBtn = document.querySelector('.open-sources');
-
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', handleRefreshKB);
-    }
-
-    if (openSourcesBtn) {
-      openSourcesBtn.addEventListener('click', handleOpenSources);
-    }
-  });
 
   // ---------------------------------------------------------------------------
   // Chat Turn Creation & Rendering
@@ -344,7 +332,7 @@
 
     userTurn.append(bubble, meta);
     chatMessages.appendChild(userTurn);
-    userTurn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    scrollChatToBottom();
     return userTurn;
   }
 
@@ -364,7 +352,7 @@
 
     assistantTurn.append(header, loadingCard);
     chatMessages.appendChild(assistantTurn);
-    assistantTurn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    scrollChatToBottom();
     return assistantTurn;
   }
 
@@ -373,14 +361,15 @@
     const taskId = data.taskId || '';
     turnEl.dataset.taskId = taskId;
 
-    const route = data.route || {};
+    const route = data.route || data.decision?.route || {};
     const action = data.decision?.action || data.decision || 'MANUAL_ONLY';
     const why = data.decision?.why || data.why || '';
     const tier = data.tier || data.routerTier || 'gemma';
     const riskTier = route.risk_tier || 'moderate';
+    const codingRoute = ['codex', 'antigravity', 'copilot'].includes(route.recommended_destination);
 
     // Compute whether the KB has docs-verified claims
-    const hasDocsOrigin = route.kb_refs && route.kb_refs.some((ref) => ref && ref.includes('docs'));
+    const hasDocsOrigin = route.kb_docs_verified === true || route.kb_claims?.some((claim) => claim.origin === 'docs');
 
     // Header
     const header = document.createElement('div');
@@ -482,33 +471,15 @@
       <span class="info-label">Recommended</span>
       <div class="recommended-info">
         <div class="recommended-agent" title="Agent">${escapeHtml(route.recommended_destination || '')}</div>
-        ${route.recommended_model !== null ? `<div class="recommended-model" title="Model">${escapeHtml(route.recommended_model)}</div>` : ''}
-        ${route.model_reasoning !== null ? `<div class="reasoning-badge" title="Reasoning Level">${escapeHtml(route.model_reasoning)}</div>` : ''}
-        <div class="recommended-reason" title="One-line Reason">${escapeHtml(route.reason || '')}</div>
+        ${route.recommended_model ? `<div class="recommended-model" title="Model">${escapeHtml(route.recommended_model)}</div>` : ''}
+        ${route.model_reasoning ? `<div class="reasoning-badge" title="Reasoning Level">${escapeHtml(route.model_reasoning)}</div>` : ''}
+        <div class="recommended-reason" title="Routing reason">${escapeHtml(route.reason || '')}</div>
+        ${route.kb_note === 'No model data yet' ? '<div class="recommended-reason">Model is listed as available, but has no verified KB facts yet.</div>' : ''}
       </div>
       <div class="recommended-badges">
-        ${route.kb_stale ? '<span class="badge badge-stale">Stale</span>' : ''}
+        ${codingRoute && route.kb_stale ? '<span class="badge badge-stale">Stale</span>' : ''}
         ${hasDocsOrigin ? '<span class="badge badge-docs-verified">Docs-verified</span>' : ''}
-        ${!hasDocsOrigin && !route.kb_stale ? '<span class="badge badge-unverified">Unverified</span>' : ''}
-      </div>
-    `;
-    card.appendChild(recommendedCard);
-
-    // Recommended Card
-    const recommendedCard = document.createElement('div');
-    recommendedCard.className = 'info-card recommended-card';
-    recommendedCard.innerHTML = `
-      <span class="info-label">Recommended</span>
-      <div class="recommended-info">
-        <div class="recommended-agent" title="Agent">${escapeHtml(route.recommended_destination || '')}</div>
-        ${route.recommended_model !== null ? `<div class="recommended-model" title="Model">${escapeHtml(route.recommended_model)}</div>` : ''}
-        ${route.model_reasoning !== null ? `<div class="reasoning-badge" title="Reasoning Level">${escapeHtml(route.model_reasoning)}</div>` : ''}
-        <div class="recommended-reason" title="One-line Reason">${escapeHtml(route.reason || '')}</div>
-      </div>
-      <div class="recommended-badges">
-        ${route.kb_stale ? '<span class="badge badge-stale">Stale</span>' : ''}
-        ${hasDocsOrigin ? '<span class="badge badge-docs-verified">Docs-verified</span>' : ''}
-        ${!hasDocsOrigin && !route.kb_stale ? '<span class="badge badge-unverified">Unverified</span>' : ''}
+        ${codingRoute && !hasDocsOrigin ? '<span class="badge badge-unverified">Unverified</span>' : ''}
       </div>
     `;
     card.appendChild(recommendedCard);
@@ -519,11 +490,12 @@
     whySection.innerHTML = `
       <summary class="why-collapsible summary">Why this recommendation?</summary>
       <div class="why-collapsible details">
-        <pre class="turn-context-pre" id="why-text"></pre>
-        <div class="why-sources" id="why-sources"></div>
+        <pre class="turn-context-pre why-text"></pre>
+        <div class="why-sources"></div>
       </div>
     `;
     card.appendChild(whySection);
+    populateWhySection(whySection, route);
 
     // Refresh knowledge and Open sources buttons
     const kbButtons = document.createElement('div');
@@ -533,6 +505,8 @@
       <button type="button" class="btn-primary open-sources" aria-label="Open sources">Open sources</button>
     `;
     card.appendChild(kbButtons);
+    kbButtons.querySelector('.refresh-kb')?.addEventListener('click', handleRefreshKB);
+    kbButtons.querySelector('.open-sources')?.addEventListener('click', handleOpenSources);
 
     // Reasoning Card
     const reasonCard = document.createElement('div');
@@ -640,7 +614,7 @@
     card.appendChild(controlsSection);
 
     turnEl.append(header, card);
-    turnEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    scrollChatToBottom();
   }
 
   // ---------------------------------------------------------------------------
@@ -665,6 +639,32 @@
   // ---------------------------------------------------------------------------
   // Form Submission (Single Step, Auto-Clean, No Disappearing History)
   // ---------------------------------------------------------------------------
+  function routeWithSelectedContext() {
+    if (!pendingPreview) return;
+    const { text, id } = pendingPreview;
+    pendingPreview = null;
+    if (contextPreview) contextPreview.hidden = true;
+    if (task) {
+      task.value = '';
+      task.style.height = '38px';
+      vscode.setState({ task: '' });
+    }
+    if (heroState) heroState.style.display = 'none';
+    appendUserMessage(text, new Date().toISOString());
+    appendAssistantLoadingTurn(id, text);
+    resourcesManager?.setSearching(text);
+    vscode.postMessage({ type: 'routeTask', text, requestId: id, sources: [...selected] });
+  }
+
+  contextPreviewCancel?.addEventListener('click', () => {
+    pendingPreview = null;
+    if (contextPreview) contextPreview.hidden = true;
+    if (submit) submit.disabled = false;
+    setSubmitButtonState('route', false);
+    task?.focus();
+  });
+  contextPreviewRoute?.addEventListener('click', routeWithSelectedContext);
+
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
     if (!hasProject) {
@@ -679,36 +679,11 @@
       return;
     }
 
-    // 1. Immediately clear the prompt input box and draft state
-    if (task) {
-      task.value = '';
-      task.style.height = 'auto';
-      task.style.height = '38px';
-      vscode.setState({ task: '' });
-    }
-
-    // 2. Hide hero state
-    if (heroState) heroState.style.display = 'none';
-
-    // 3. Append user message to stream
-    appendUserMessage(promptText, new Date().toISOString());
-
-    // 4. Append assistant loading turn
     const reqId = ++requestId;
-    appendAssistantLoadingTurn(reqId, promptText);
-
-    // 5. Update submit button state & discover resources
+    pendingPreview = { text: promptText, id: reqId };
     setSubmitButtonState('route', true);
     if (submit) submit.disabled = true;
-    resourcesManager?.setSearching(promptText);
-
-    // 6. Post routeTask to extension
-    vscode.postMessage({
-      type: 'routeTask',
-      text: promptText,
-      requestId: reqId,
-      sources: [...selected],
-    });
+    vscode.postMessage({ type: 'previewContext', text: promptText, requestId: reqId });
   });
 
   // ---------------------------------------------------------------------------
@@ -716,6 +691,42 @@
   // ---------------------------------------------------------------------------
   window.addEventListener('message', ({ data }) => {
     if (!data || typeof data !== 'object') return;
+
+    if (data.type === 'contextPreview') {
+      if (!pendingPreview || data.requestId !== pendingPreview.id) return;
+      selected.clear();
+      contextPreviewList?.replaceChildren();
+      const parts = Array.isArray(data.parts) ? data.parts : [];
+      for (const part of parts) {
+        if (typeof part?.source !== 'string' || typeof part?.text !== 'string') continue;
+        selected.add(part.source);
+        const item = document.createElement('div');
+        item.className = 'context-preview-item';
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) selected.add(part.source);
+          else selected.delete(part.source);
+        });
+        label.append(checkbox, document.createTextNode(part.source));
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = 'Preview';
+        const preview = document.createElement('pre');
+        preview.textContent = part.text;
+        details.append(summary, preview);
+        item.append(label, details);
+        contextPreviewList?.appendChild(item);
+      }
+      if (contextPreviewStatus) contextPreviewStatus.textContent = parts.length
+        ? `Choose what Baton may use for this task (up to ${data.limit} characters).`
+        : 'No local project context was found. You can still route the task.';
+      if (contextPreview) contextPreview.hidden = false;
+      contextPreviewRoute?.focus();
+      return;
+    }
 
     if (data.type === 'projectState') {
       hasProject = data.hasProject === true;
@@ -949,6 +960,8 @@
     }
 
     if (data.type === 'routeError') {
+      pendingPreview = null;
+      if (contextPreview) contextPreview.hidden = true;
       if (submit) submit.disabled = false;
       setSubmitButtonState('route', false);
       const turnEl = chatMessages?.querySelector(`[data-request-id="${data.requestId}"]`);

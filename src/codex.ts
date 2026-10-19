@@ -7,6 +7,7 @@ import { decide } from './policy';
 import { JsonStore } from './store';
 import { BatonTerminals, capture, codexAvailable, preparePrompt } from './terminal';
 import { TaskActionMessage, TaskActionReply, TaskRecord } from './types';
+import { loadAvailability, KbContext } from './kb/store';
 
 export function buildCodexPrompt(task: TaskRecord): string {
   return ['Implement the following coding task in this workspace.',
@@ -17,17 +18,16 @@ export function buildCodexPrompt(task: TaskRecord): string {
   ].join('\n');
 }
 
-/** Agent integration capabilities determined by running `codex --help`.
- * Since Codex CLI is not installed in this environment, defaults to false.
- * To update: run `codex --help` and check for --model and --reasoning flags.
- * Quote the relevant help lines when updating.
- */
+/** Verified with `codex exec --help`: --model exists; no reasoning flag is shown. */
 export const CodexCapabilities = {
-  supportsModelFlag: false,
+  supportsModelFlag: true,
   supportsReasoningFlag: false,
 };
 
 function requireRunnable(task: TaskRecord): 'RUN' | 'CONFIRM' {
+  if (task.route.recommended_destination === 'antigravity' || task.route.recommended_destination === 'copilot') {
+    throw new Error('This agent has no Baton run adapter. Open its prompt manually.');
+  }
   const action = decide(task.route, [task.text, task.plan ?? ''].join('\n')).action;
   if (!['RUN', 'CONFIRM'].includes(task.decision) || !['RUN', 'CONFIRM'].includes(action)
     || task.status === 'blocked') throw new Error('Policy does not permit running this task in Codex.');
@@ -41,7 +41,8 @@ export class CodexRunner implements vscode.Disposable {
   private readonly pending = new Set<string>();
   private readonly terminals = new BatonTerminals();
 
-  constructor(private readonly store: JsonStore, private readonly history: TaskHistory) {}
+  constructor(private readonly store: JsonStore, private readonly history: TaskHistory,
+    private readonly kbContext: KbContext) {}
 
   async handle(message: TaskActionMessage): Promise<TaskActionReply> {
     let notice: string;
@@ -116,7 +117,26 @@ export class CodexRunner implements vscode.Disposable {
     const latest = await this.load(task.id);
     const latestAction = requireRunnable(latest);
     if (latestAction === 'CONFIRM' && action !== 'CONFIRM') return 'The task now needs confirmation. Choose Run in Codex again.';
-    const prepared = await preparePrompt(buildCodexPrompt(latest));
+    const requestedModel = latest.recommended_model ?? latest.route.recommended_model;
+    let model: string | undefined;
+    if (requestedModel) {
+      try {
+        const availability = await loadAvailability(this.kbContext);
+        if (CodexCapabilities.supportsModelFlag && availability.models.some((entry) =>
+          entry.agent_id === 'codex' && entry.kind === 'model'
+          && entry.name.toLowerCase() === requestedModel.toLowerCase())) {
+          model = requestedModel;
+        } else {
+          void vscode.window.showInformationMessage(`Select model ${requestedModel} manually in Codex.`);
+        }
+      } catch {
+        void vscode.window.showInformationMessage(`Select model ${requestedModel} manually in Codex.`);
+      }
+    }
+    if (latest.model_reasoning || latest.route.model_reasoning) {
+      void vscode.window.showInformationMessage(`Select reasoning ${latest.model_reasoning ?? latest.route.model_reasoning} manually in Codex.`);
+    }
+    const prepared = await preparePrompt(buildCodexPrompt(latest), model);
     const previousStatus = latest.status;
     try {
       const saved = await this.store.updateTask(task.id, (current) => {
@@ -180,32 +200,6 @@ export class CodexRunner implements vscode.Disposable {
       ? "$ErrorActionPreference = 'Stop'; npm.cmd test; exit $LASTEXITCODE" : 'npm test';
     await this.terminals.open('Baton: Tests', workspace, command);
     return 'Running npm test. Review the result before choosing Mark done.';
-  }
-
-  /**
-   * Build a Codex CLI command with optional model and reasoning flags.
-   * Only passes flags if the capability is supported.
-   * @param opts - Optional model and reasoning flags
-   */
-  buildCommand(opts?: { model?: string; reasoning?: 'low' | 'medium' | 'high' | 'default' }): string {
-    const { model, reasoning } = opts || {};
-    let command = '';
-
-    // Add model flag if supported and provided
-    if (model && CodexCapabilities.supportsModelFlag) {
-      command += ` --model ${model}`;
-    } else if (model && !CodexCapabilities.supportsModelFlag) {
-      vscode.window.showInformationMessage(`Select model ${model} manually in Codex. Model auto-set is not supported.`);
-    }
-
-    // Add reasoning flag if supported and provided
-    if (reasoning && CodexCapabilities.supportsReasoningFlag) {
-      command += ` --reasoning ${reasoning}`;
-    } else if (reasoning && !CodexCapabilities.supportsReasoningFlag) {
-      vscode.window.showInformationMessage(`Select reasoning ${reasoning} manually in Codex. Reasoning auto-set is not supported.`);
-    }
-
-    return command;
   }
 
   dispose(): void { this.terminals.dispose(); }

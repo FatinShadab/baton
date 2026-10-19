@@ -7,7 +7,8 @@ function initializeTaskActions(vscode) {
 
   function optionsFor(task) {
     const options = [];
-    if (installed.codex && task.saved !== false && ['RUN', 'CONFIRM'].includes(task.decision)
+    if (installed.codex && !['antigravity', 'copilot'].includes(task.route?.recommended_destination)
+      && task.saved !== false && ['RUN', 'CONFIRM'].includes(task.decision)
       && task.route?.risk_tier !== 'high' && !['running', 'done', 'blocked'].includes(task.status)) {
       options.push(['codex', 'Codex CLI — run task']);
     }
@@ -69,7 +70,7 @@ function initializeTaskActions(vscode) {
     });
     label.append(select);
     container.append(label, button);
-    update();
+    queueMicrotask(update);
   }
 
   window.addEventListener('message', ({ data }) => {

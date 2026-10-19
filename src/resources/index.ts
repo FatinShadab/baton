@@ -49,7 +49,7 @@ export async function discoverResources(
     };
   }
 
-  const cacheKey = createHash('sha256').update(normalized.toLowerCase()).digest('hex');
+  const cacheKey = createHash('sha256').update(JSON.stringify([normalized.toLowerCase(), ctxSnippet])).digest('hex');
   const cached = cache.get(cacheKey);
   if (cached) {
     return { ...cached, taskId };
@@ -61,7 +61,12 @@ export async function discoverResources(
 
   // If Gemma is unavailable or timed out, fall back to keyword tool plan
   if (!plan) {
-    plan = fallbackResearchPlan(normalized);
+    const framework = /\b(?:from\s+flask\b|import\s+flask\b|Flask\s*\()/i.test(ctxSnippet) ? 'Flask Python'
+      : /\b(?:from\s+fastapi\b|import\s+fastapi\b|FastAPI\s*\()/i.test(ctxSnippet) ? 'FastAPI Python'
+      : /\b(?:from\s+django\b|import\s+django\b)/i.test(ctxSnippet) ? 'Django Python'
+      : /\b[A-Za-z0-9_.-]+\.py\b/i.test(normalized) ? 'Python' : '';
+    const subject = normalized.replace(/\b[A-Za-z0-9_.-]+\.(?:py|ts|tsx|js|jsx|go|rs|java|html|css)\b/gi, 'source file');
+    plan = fallbackResearchPlan(`${framework} ${subject}`.trim());
   }
 
   // 2. Baton executes the live tools (YouTube, Dev.to, arXiv) in parallel

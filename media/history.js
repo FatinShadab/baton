@@ -90,6 +90,8 @@ function initializeHistory(vscode, taskActions) {
 
       const info = document.createElement('p');
       info.textContent = `${task.route.task_type} → ${task.route.recommended_destination}\n` +
+        `Model: ${task.recommended_model ?? task.route.recommended_model ?? 'default'}\n` +
+        `Reasoning: ${task.model_reasoning ?? task.route.model_reasoning ?? 'default'}\n` +
         `Research needed: ${task.route.research_needed ? 'Yes' : 'No'}\n` +
         `Reason: ${task.route.reason}\n` +
         `Decision: ${task.decision}`;

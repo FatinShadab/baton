@@ -136,9 +136,7 @@
     if (message.type === 'sessionsList') {
       currentSessions = message.sessions || [];
       currentProject = message.project;
-      if (message.activeSessionId !== undefined) {
-        currentActiveId = message.activeSessionId;
-      }
+      currentActiveId = message.activeSessionId;
       renderSessions();
     } else if (message.type === 'activeSessionChanged') {
       currentActiveId = message.activeSessionId;

@@ -36,18 +36,16 @@ export class TaskHistory {
   }
 
   private async recordOutcome(task: TaskRecord, outcome: 'Passed' | 'Failed' | 'Partial'): Promise<void> {
-    const availability = await this.store.loadAvailability();
-    const globalStorageUri = availability.globalStorageUri.fsPath;
     const stats = await this.store.loadStats();
     const agentId = task.route.recommended_destination || 'unknown';
     const taskType = task.route.task_type || 'unknown';
-    const model = task.recommended_model || null;
+    const model = task.recommended_model ?? task.route.recommended_model ?? null;
     const existing = stats.find((s) => s.agent_id === agentId && s.taskType === taskType && s.model === model);
     let updated;
     if (existing) {
       const newTotal = existing.total + 1;
       const newSuccess = outcome === 'Passed' ? existing.success + 1 : outcome === 'Partial' ? existing.success + 0.5 : existing.success;
-      updated = [...stats, { ...existing, total: newTotal, success: newSuccess }];
+      updated = stats.map((entry) => entry === existing ? { ...existing, total: newTotal, success: newSuccess } : entry);
     } else {
       const newSuccess = outcome === 'Passed' ? 1 : outcome === 'Partial' ? 0.5 : 0;
       updated = [...stats, { agent_id: agentId, model, taskType, total: 1, success: newSuccess }];
@@ -72,7 +70,7 @@ export class TaskHistory {
           ...(kind === 'task' ? { outcome: task.outcome, changedFiles: task.changedFiles } : {}) },
       });
       // Record outcome in stats
-      await this.recordOutcome(task, change.outcome as 'Passed' | 'Failed' | 'Partial');
+      if ('outcome' in change) await this.recordOutcome(task, change.outcome);
       return indexed ? (kind === 'plan' ? 'Plan imported and added to memory.' : 'Completed task saved to memory.')
         : 'Task saved, but memory could not be saved. Retry to add it to search.';
     }).catch(() => 'Could not save this task. Please retry.');

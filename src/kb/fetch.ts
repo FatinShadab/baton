@@ -152,7 +152,7 @@ async function download(url: string, deps: FetchDeps, now: Date, timeoutMs: numb
         redirect: 'manual',
         credentials: 'omit',
         signal: controller.signal,
-        headers: { 'User-Agent': USER_AGENT, Accept: 'text/html, text/markdown, text/plain' },
+        headers: { 'User-Agent': USER_AGENT },
       });
     } catch {
       clearTimeout(timer);
