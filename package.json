@@ -5,19 +5,48 @@
   "version": "0.0.1",
   "publisher": "baton-dev",
   "engines": {
-    "vscode": "^1.109.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "AI",
+    "Chat",
+    "Programming Languages"
   ],
+  "keywords": [
+    "ai",
+    "relay",
+    "agent",
+    "gemma",
+    "ollama",
+    "chatgpt",
+    "gemini",
+    "claude",
+    "mcp"
+  ],
+  "icon": "media/baton-watermark.png",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FatinShadab/baton"
+  },
+  "bugs": {
+    "url": "https://github.com/FatinShadab/baton/issues"
+  },
+  "homepage": "https://github.com/FatinShadab/baton#readme",
   "main": "./dist/extension.js",
   "activationEvents": [
     "onView:baton.sessions",
     "onCommand:baton.openEditor",
     "onCommand:baton.newSession",
+    "onCommand:baton.focus",
+    "onCommand:baton.setKeys",
     "onCommand:baton.copyMcpConfig",
+    "onCommand:baton.kb.openSources",
+    "onCommand:baton.kb.openAvailability",
     "onCommand:baton.kb.previewSource",
-    "onCommand:baton.kb.update"
+    "onCommand:baton.kb.update",
+    "onCommand:baton.kb.showCandidates",
+    "onCommand:baton.kb.resetStats"
   ],
   "contributes": {
     "commands": [
@@ -97,7 +126,8 @@
     "watch": "node esbuild.mjs --watch",
     "check": "tsc --noEmit",
     "test": "esbuild tests/task-flow.test.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/task-flow.test.cjs && node --test dist/task-flow.test.cjs",
-    "eval": "esbuild scripts/eval.ts --bundle --platform=node --target=node18 --outfile=dist/eval.cjs && node dist/eval.cjs"
+    "eval": "esbuild scripts/eval.ts --bundle --platform=node --target=node18 --outfile=dist/eval.cjs && node dist/eval.cjs",
+    "package": "npx --yes @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",
