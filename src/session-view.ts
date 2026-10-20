@@ -6,8 +6,9 @@ import { currentProject, sameProject } from './project';
 import { clearPersonalKey, personalKeyStatus, savePersonalKey, setKeys } from './secrets';
 import { configureRouter } from './router';
 import { getRouterSettings, RouterSettingsSchema } from './router/settings';
-import { copyMcpConfig, serverOptions } from './mcp/config';
+import { copyMcpConfig } from './mcp/config';
 import { McpSession } from './mcp/session';
+import { TaskFlow } from './task-flow';
 
 export class SessionViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'baton.sessions';
@@ -22,6 +23,7 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
     private readonly secrets: vscode.SecretStorage,
     private readonly mcp: McpSession,
     private readonly context: vscode.ExtensionContext,
+    private readonly taskFlow: TaskFlow,
   ) {}
 
   public setActiveSessionId(id: string | undefined): void {
@@ -42,9 +44,14 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
         ? allSessions.filter((s) => sameProject(s.workspaceUri, workspace.uri))
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         : [];
+      const folder = vscode.workspace.workspaceFolders?.find((entry) => entry.uri.toString() === workspace?.uri);
+      const states = folder ? await this.taskFlow.files.listTasks(folder.uri.fsPath) : [];
+      const stateById = new Map(states.map((entry) => [entry.id, entry]));
       await this.view.webview.postMessage({
         type: 'sessionsList',
-        sessions,
+        sessions: sessions.map((session) => ({ ...session,
+          taskState: stateById.get(session.taskIds?.[0] ?? '')?.state,
+          nextAction: stateById.get(session.taskIds?.[0] ?? '')?.nextAction })),
         activeSessionId: sessions.some((session) => session.id === this.activeSessionId) ? this.activeSessionId : undefined,
         project: workspace ? { name: workspace.name, uri: workspace.uri } : undefined,
       });
@@ -102,9 +109,18 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
           const project = currentProject();
           const session = await this.store.getSession(message.sessionId);
           if (!project || !sameProject(session?.workspaceUri, project.uri)) { await this.refresh(); return; }
-          await this.store.deleteSession(message.sessionId);
-          if (this.activeSessionId === message.sessionId) {
-            this.activeSessionId = undefined;
+          const folder = vscode.workspace.workspaceFolders?.find((entry) => sameProject(entry.uri.toString(), project.uri));
+          const location = folder && session?.taskIds?.[0]
+            ? await this.taskFlow.files.findTask(folder.uri.fsPath, session.taskIds[0]) : undefined;
+          if (location) {
+            const state = await this.taskFlow.files.state(location.task);
+            if (state.status !== 'done' && state.status !== 'abandoned') {
+              await this.taskFlow.files.transition(location.task, 'abandoned', 'User abandoned task');
+              await this.store.updateTask(location.id, (task) => ({ ...task, flowStatus: 'abandoned', status: 'blocked' }));
+            }
+          } else {
+            await this.store.deleteSession(message.sessionId);
+            if (this.activeSessionId === message.sessionId) this.activeSessionId = undefined;
           }
           await this.refresh();
         } else if (message.type === 'personalKeysStatus') {
@@ -152,7 +168,7 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
           }
         } else if (message.type === 'mcpStatusRequest') {
           let options;
-          try { options = this.mcp.running ? serverOptions(this.context) : undefined; } catch { /* closed */ }
+          try { options = this.mcp.running ? this.mcp.options() : undefined; } catch { /* closed */ }
           await this.view?.webview.postMessage({
             type: 'mcpStatus',
             running: this.mcp.running,
@@ -162,7 +178,7 @@ export class SessionViewProvider implements vscode.WebviewViewProvider {
         } else if (message.type === 'mcpToggle') {
           const notice = this.mcp.running ? await this.mcp.stop() : await this.mcp.start();
           let options;
-          try { options = this.mcp.running ? serverOptions(this.context) : undefined; } catch { /* closed */ }
+          try { options = this.mcp.running ? this.mcp.options() : undefined; } catch { /* closed */ }
           await this.view?.webview.postMessage({
             type: 'mcpStatus',
             running: this.mcp.running,

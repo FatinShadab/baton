@@ -17,7 +17,7 @@ The router tries Gemma 4 through Google AI Studio, then Gemma through Ollama Clo
 
 ## Requirements and setup
 
-- VS Code 1.85 or newer.
+- VS Code 1.109 or newer.
 - Node.js 18 or newer and npm to build the extension.
 - [Codex CLI](https://github.com/openai/codex) installed and signed in to use **Run in Codex**. Planning and routing do not require the CLI.
 
@@ -73,16 +73,25 @@ The sites handle their own sign-in. If sign-in is blocked in VS Code, use **Open
 
 ## MCP server
 
-`npm run build` creates the stdio server at `out/mcp.js`. The sidebar's **Start MCP** button starts a local session and checks that the tools respond; **Stop MCP** closes it. Compatible VS Code versions can discover one Baton MCP server per local workspace folder. **Baton: Copy MCP Config** copies an `mcpServers` JSON snippet for an external client, scoped to the active editor's project (or the first folder). Copy it again after switching projects.
+`npm run build` creates the stdio server at `out/mcp.js`. The sidebar's **Start MCP** button starts a local session and checks that the knowledge base responds; **Stop MCP** closes it. VS Code can discover one Baton MCP server per local workspace folder. **Baton: Copy MCP Config** copies an `mcpServers` JSON snippet for an external MCP client, scoped to the active editor's project (or the first folder). Copy it again after switching projects. The copied configuration includes the extension installation path and global storage path; keep it local and copy a fresh one after moving or reinstalling the extension. Starting MCP or copying its config creates `AGENTS.md` if absent; when one already exists, Baton adds or updates only its marked MCP section.
 
 | Tool | Returns |
 | --- | --- |
-| `get_project_overview` | README introduction and a shallow project file tree |
+| `get_project_knowledge` | One-call project overview, active plan, recent history, and shared knowledge index |
+| `get_project_overview` | README introduction, saved project constraints and preferences, and a shallow file tree |
 | `search_project_context(query)` | Relevant saved project memories |
 | `get_active_plan` | The latest saved task with `planned` status |
 | `get_project_history` | The 20 most recent saved tasks for the project, with status and plan summaries |
+| `get_knowledge_base_overview` | Shared agent and model index, IDs, and verification dates |
+| `get_agent_knowledge(agent_id)` | Full knowledge and source-backed claims for one agent and its models |
+| `search_knowledge_base(query)` | Ranked shared knowledge hits with source URLs |
+| `search_combined_context(query)` | Project memory and shared knowledge hits in one response |
+| `get_task_summary(taskId)` | Saved finish summary for a project task |
+| `get_task_context(task_id)` | Saved request, planning prompt, full plan, handoffs, step summaries, and finish summary |
+| `get_task_prompt(task_id, kind, step_id?)` | A planning prompt or one step handoff prompt |
+| `baton_get_step_summary`, `baton_list_summaries`, `baton_get_plan_summary` | Step and plan summaries for a project task |
 
-The MCP tools are read-only. Each server uses its project root to filter Baton's shared `tasks.json` and `memory.json`, so tasks and plans from other projects are excluded. An external client's copied configuration keeps the project root it had when copied.
+The MCP tools are read-only. Each server uses its project root to filter Baton's shared `tasks.json` and `memory.json` and to locate structured task summaries. Agent and model knowledge is shared across projects: bundled `kb/agents.seed.json` is combined with saved `kb.json`, with saved entries taking precedence. An external client's copied configuration keeps the project root it had when copied.
 
 ## Data and security
 

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { ensureMcpAgentInstructions } from './agents';
 
 const PROVIDER_ID = 'baton.local-context';
 
@@ -28,6 +29,7 @@ export function serverOptions(context: vscode.ExtensionContext, folder?: vscode.
     env: {
       BATON_MEMORY_PATH: vscode.Uri.joinPath(context.globalStorageUri, 'memory.json').fsPath,
       BATON_PROJECT_ROOT: root.fsPath,
+      BATON_EXTENSION_ROOT: context.extensionUri.fsPath,
     },
     cwd: root,
   };
@@ -35,10 +37,14 @@ export function serverOptions(context: vscode.ExtensionContext, folder?: vscode.
 
 export async function copyMcpConfig(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const { command, args, env } = serverOptions(context);
+    const { command, args, env, cwd } = serverOptions(context);
     const snippet = JSON.stringify({ mcpServers: { baton: { command, args, env } } }, null, 2);
     await vscode.env.clipboard.writeText(snippet);
-    void vscode.window.showInformationMessage('Baton MCP configuration copied to the clipboard.');
+    const instructions = await ensureMcpAgentInstructions(cwd);
+    const note = instructions === 'created' ? ' Created AGENTS.md.'
+      : instructions === 'updated' ? ' Updated the Baton section in AGENTS.md.'
+        : instructions === 'failed' ? ' Could not update AGENTS.md.' : '';
+    void vscode.window.showInformationMessage(`Baton MCP configuration copied to the clipboard.${note}`);
   } catch {
     void vscode.window.showErrorMessage('Baton could not copy the MCP configuration.');
   }
@@ -49,15 +55,31 @@ export function registerMcpProvider(context: vscode.ExtensionContext): void {
   if (!api.lm?.registerMcpServerDefinitionProvider || !api.McpStdioServerDefinition) return;
   try {
     const changed = new vscode.EventEmitter<void>();
-    context.subscriptions.push(changed, vscode.workspace.onDidChangeWorkspaceFolders(() => changed.fire()));
+    context.subscriptions.push(changed, vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      try {
+        changed.fire();
+      } catch {
+        // Safe fall-through
+      }
+    }));
     context.subscriptions.push(api.lm.registerMcpServerDefinitionProvider(PROVIDER_ID, {
       onDidChangeMcpServerDefinitions: changed.event,
-      provideMcpServerDefinitions: () => localFolders().map((folder) => {
-        const { command, args, env, cwd } = serverOptions(context, folder);
-        const definition = new api.McpStdioServerDefinition!(`Baton: ${folder.name}`, command, args, env);
-        definition.cwd = cwd;
-        return definition;
-      }),
+      provideMcpServerDefinitions: () => {
+        try {
+          return localFolders().flatMap((folder) => {
+            try {
+              const { command, args, env, cwd } = serverOptions(context, folder);
+              const definition = new api.McpStdioServerDefinition!(`Baton: ${folder.name}`, command, args, env);
+              definition.cwd = cwd;
+              return [definition];
+            } catch {
+              return [];
+            }
+          });
+        } catch {
+          return [];
+        }
+      },
     }));
   } catch {
     // Older VS Code versions do not expose the MCP provider API.

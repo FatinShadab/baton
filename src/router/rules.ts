@@ -24,7 +24,7 @@ export function classify(task: string): Route {
   const researchNeeded = research.test(task) || vague.test(task) || task.trim().split(/\s+/).length < 3;
   let taskType: Route['task_type'];
   if (/\b(research|investigate|explore|compare|comparison)\b/i.test(task)) taskType = 'research';
-  else if (/\b(design|architecture|architectural|approach|plan|planning)\b/i.test(task)) taskType = 'planning';
+  else if (/\b(design|architecture|architectural|approach|plan|planning|how\s+to\s+(?:build|develop|create|design|setup)|want\s+to\s+(?:develop|build|create)|from\s+scratch)\b/i.test(task)) taskType = 'planning';
   else if (/\b(docs?|readme|comments?|explain|summarize)\b/i.test(task)) taskType = 'docs';
   else if (/\b(debug|debugging|fix|bug|error|crash)\b/i.test(task)) taskType = 'debugging';
   else if (/\b(feature|implement|build|create)\b/i.test(task)) taskType = 'implementation';
@@ -40,7 +40,7 @@ export function classify(task: string): Route {
   return {
     task_type: taskType,
     risk_tier: risk,
-    recommended_destination: researchNeeded || taskType === 'research' ? 'chatgpt_web' : 'codex',
+    recommended_destination: researchNeeded || taskType === 'research' || taskType === 'planning' ? 'chatgpt_web' : 'codex',
     research_needed: researchNeeded,
     reason: risk === 'high' ? 'Danger keyword detected; this task requires manual handling.'
       : risk === 'low' ? 'Documentation, explanation, research, or review task with no danger keywords.'

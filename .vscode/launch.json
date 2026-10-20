@@ -6,11 +6,23 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "Baton: build",
+      "restart": true
+    },
+    {
+      "name": "Run Baton (with current workspace)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
         "--extensionDevelopmentPath=${workspaceFolder}",
         "${workspaceFolder}"
       ],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "Baton: build"
+      "preLaunchTask": "Baton: build",
+      "restart": true
     }
   ]
 }

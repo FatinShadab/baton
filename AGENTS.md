@@ -50,3 +50,13 @@ media/
 ## Current instruction
 
 Confirm understanding and save this brief to `AGENTS.md`. Wait for the user's next prompt before starting implementation.
+
+<!-- Baton MCP instructions: start -->
+## Baton project knowledge
+
+When Baton MCP is connected, call `get_project_knowledge` for the project overview, active plan, recent history, and shared agent/model index. Use `search_combined_context` to search saved project memory and shared knowledge together.
+
+For a task, call `get_task_context(task_id)` to read its saved request, planning prompt, plan, handoffs, and summaries. Use `get_task_prompt(task_id, kind, step_id)` for one planning or step handoff prompt. Use `baton_get_plan_summary`, `baton_list_summaries`, and `baton_get_step_summary` when you only need summaries. Call `get_agent_knowledge(agent_id)` for source-backed agent and model details.
+
+Baton MCP tools are read-only. If they are unavailable, connect the stdio server using **Baton: Copy MCP Config**. Keep this project's existing instructions in force.
+<!-- Baton MCP instructions: end -->

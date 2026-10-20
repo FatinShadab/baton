@@ -16,11 +16,16 @@ import { maybeRunDailyUpdate, registerUpdateCommand } from './kb/update';
 import { SessionViewProvider } from './session-view';
 import { BatonEditorPanel } from './editor-panel';
 import { currentProjectFolder } from './project';
+import { TaskFlow } from './task-flow';
+import { migrateLegacyTasks } from './task-migration';
 
 export async function activate(context: vscode.ExtensionContext): Promise<{ store: JsonStore; memory: MemoryStore }> {
   await importDevelopmentKeys(context);
   const store = new JsonStore(context.globalStorageUri);
+  const taskFlow = new TaskFlow(context.globalStorageUri.fsPath, context.extensionUri.fsPath);
+  await migrateLegacyTasks(store, taskFlow).catch(() => 0);
   configureRouter((await store.loadRouterSettings()) ?? DEFAULT_ROUTER_SETTINGS);
+  context.subscriptions.push(initializeRouter(context.secrets));
   const memory = initializeMemory(store);
   const history = new TaskHistory(store, memory);
   const codex = new CodexRunner(store, history, context);
@@ -37,6 +42,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
       codex,
       mcp,
       context.secrets,
+      taskFlow,
       () => {
         sessionProvider.setActiveSessionId(BatonEditorPanel.currentPanel?.getActiveSessionId());
         void sessionProvider.refresh();
@@ -68,6 +74,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
       codex,
       mcp,
       context.secrets,
+      taskFlow,
       () => {
         sessionProvider.setActiveSessionId(BatonEditorPanel.currentPanel?.getActiveSessionId());
         void sessionProvider.refresh();
@@ -90,6 +97,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
     context.secrets,
     mcp,
     context,
+    taskFlow,
   );
 
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -129,12 +137,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ stor
   void maybeRunDailyUpdate(context);
 
   const editorListener = vscode.window.onDidChangeActiveTextEditor(() => {
-    void sessionProvider.refresh();
-    void BatonEditorPanel.currentPanel?.refreshProjectState();
+    sessionProvider.refresh().catch(() => {});
+    BatonEditorPanel.currentPanel?.refreshProjectState().catch(() => {});
   });
   const workspaceListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
-    void sessionProvider.refresh();
-    void BatonEditorPanel.currentPanel?.refreshProjectState();
+    sessionProvider.refresh().catch(() => {});
+    BatonEditorPanel.currentPanel?.refreshProjectState().catch(() => {});
   });
 
   context.subscriptions.push(editorListener, workspaceListener);

@@ -78,6 +78,22 @@ export class TaskHistory {
     return operation;
   }
 
+  async finishWithSummary(id: string, summary: string): Promise<string> {
+    const clean = summary.trim();
+    if (!clean || Buffer.byteLength(clean, 'utf8') > 20 * 1024) throw new Error('Enter a finish summary under 20 KB.');
+    const task = await this.store.updateTask(id, (current) => ({
+      ...current, finishSummary: clean, status: 'done',
+    }));
+    if (!task) throw new Error('Could not save the finish summary.');
+    const indexed = await this.memory.add({ kind: 'task',
+      text: `${this.completedText(task)}\nFinish summary:\n${clean}`,
+      meta: { taskId: task.id, taskText: task.text, workspaceUri: task.workspaceUri,
+        outcome: task.outcome, finishSummary: clean },
+    });
+    return indexed ? 'Task finished. Summary saved for MCP agents.'
+      : 'Task finished. Summary saved in task history; memory indexing is unavailable.';
+  }
+
   private completedText(task: TaskRecord): string {
     const parts = [`Task: ${task.text}`, `Decision: ${task.decision}`, `Reason: ${task.route.reason}`,
       task.outcome ? `Outcome: ${task.outcome}` : 'Status: done',

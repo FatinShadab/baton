@@ -1,8 +1,34 @@
+import { z } from 'zod';
 import type { ContextPart } from './context';
+import type { RaceMap } from './task-model';
+
+export interface UserAgentConfig {
+  id: string;
+  name: string;
+  type: 'web' | 'local';
+  models: string;
+  color: 'purple' | 'cyan' | 'emerald' | 'amber' | 'rose';
+  githubAttached: boolean;
+  url?: string;
+  capabilities: string[];
+  enabled: boolean;
+}
+
+export const UserAgentConfigSchema: z.ZodType<UserAgentConfig> = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  type: z.enum(['web', 'local']),
+  models: z.string(),
+  color: z.enum(['purple', 'cyan', 'emerald', 'amber', 'rose']),
+  githubAttached: z.boolean(),
+  url: z.string().optional(),
+  capabilities: z.array(z.string()),
+  enabled: z.boolean(),
+});
 
 export type PanelMessage =
   | { type: 'previewContext'; text: string; requestId: number }
-  | { type: 'routeTask'; text: string; requestId: number; sources: string[] };
+  | { type: 'routeTask'; text: string; requestId: number; sources: string[]; userAgents?: UserAgentConfig[] };
 export type HistoryMessage =
   | { type: 'loadHistory' }
   | { type: 'importPlan'; taskId: string; plan: string };
@@ -21,15 +47,19 @@ export type HistoryReply =
   | { type: 'historyError'; message: string };
 
 export type HandoffMessage =
-  | { type: 'planExternal'; target: 'chatgpt' | 'gemini' | 'antigravity'; taskId: string }
-  | { type: 'openExternalHandoff'; target: 'chatgpt' | 'gemini' }
+  | { type: 'planExternal'; target: 'chatgpt' | 'gemini' | 'claude' | 'antigravity'; taskId: string }
+  | { type: 'openExternalHandoff'; target: 'chatgpt' | 'gemini' | 'claude' }
   | { type: 'handoffAvailabilityRequest' }
   | { type: 'savePlan'; taskId: string; plan: string }
+  | { type: 'finishTask'; taskId: string; summary: string }
+  | { type: 'saveStepSummary'; taskId: string; stepId: string; summary: string }
+  | { type: 'copyToClipboard'; text: string }
   | { type: 'readClipboard' };
 export type HandoffReply =
   | { type: 'clipboardContent'; text: string }
+  | { type: 'clipboardCopied'; notice: string }
   | { type: 'planSaved'; taskId: string; notice: string }
-  | { type: 'planSaveError'; message: string };
+  | { type: 'planSaveError'; taskId?: string; message: string };
 
 export type VoiceMessage =
   | { type: 'startVoiceRecorder' };
@@ -48,16 +78,25 @@ export function isHandoffMessage(message: unknown): message is HandoffMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
   if (message.type === 'handoffAvailabilityRequest') return true;
   if (message.type === 'readClipboard') return true;
+  if (message.type === 'copyToClipboard' && 'text' in message && typeof message.text === 'string') return true;
   if (message.type === 'openExternalHandoff') return 'target' in message
-    && (message.target === 'chatgpt' || message.target === 'gemini');
+    && (message.target === 'chatgpt' || message.target === 'gemini' || message.target === 'claude');
   if (message.type === 'planExternal' && 'target' in message && 'taskId' in message
     && typeof message.taskId === 'string' && message.taskId.length > 0
-    && (message.target === 'chatgpt' || message.target === 'gemini'
+    && (message.target === 'chatgpt' || message.target === 'gemini' || message.target === 'claude'
       || message.target === 'antigravity')) return true;
   if (message.type === 'savePlan' && 'taskId' in message && 'plan' in message
     && typeof message.taskId === 'string' && message.taskId.length > 0
     && typeof message.plan === 'string' && message.plan.trim().length > 0
     && Buffer.byteLength(message.plan, 'utf8') <= 100 * 1024) return true;
+  if (message.type === 'finishTask' && 'taskId' in message && 'summary' in message
+    && typeof message.taskId === 'string' && message.taskId.length > 0
+    && typeof message.summary === 'string' && message.summary.trim().length > 0
+    && Buffer.byteLength(message.summary, 'utf8') <= 20 * 1024) return true;
+  if (message.type === 'saveStepSummary' && 'taskId' in message && 'stepId' in message && 'summary' in message
+    && typeof message.taskId === 'string' && typeof message.stepId === 'string'
+    && typeof message.summary === 'string' && message.summary.trim().length > 0
+    && Buffer.byteLength(message.summary, 'utf8') <= 20 * 1024) return true;
   return false;
 }
 
@@ -81,21 +120,55 @@ export type RouterTier = 'gemma' | 'ollama' | 'rules';
 export type RouterResult = { route: Route; tier: RouterTier; notice?: string };
 export type ExtensionMessage =
   | { type: 'contextPreview'; requestId: number; parts: ContextPart[]; limit: number }
-  | { type: 'routed'; requestId: number; taskId: string; text: string; decision: PolicyDecision; tier: RouterTier; saved: boolean; notice?: string; contextSnippet?: string; contextParts?: ContextPart[] }
+  | {
+      type: 'routed';
+      requestId: number;
+      taskId: string;
+      task_id?: string;
+      project_id?: string;
+      run_id?: string;
+      text: string;
+      decision: PolicyDecision;
+      route?: Route;
+      tier: RouterTier;
+      saved: boolean;
+      notice?: string;
+      contextSnippet?: string;
+      contextParts?: ContextPart[];
+      planningPrompt?: string;
+      planningPlatform?: string;
+      planningReason?: string;
+      attachFiles?: string[];
+      flowStatus?: string;
+      race?: RaceMap & { prompts: Record<string, string> };
+      stepSummaries?: Record<string, string>;
+      readySteps?: string[];
+      runnerAgent?: UserAgentConfig;
+      agentType?: 'web' | 'local';
+      githubAttached?: boolean;
+      githubUrl?: string;
+      lapNumber?: number;
+    }
+  | {
+      type: 'raceSessionFinished';
+      sessionId: string;
+      session: SessionRecord;
+      tasks: TaskRecord[];
+    }
+  | { type: 'userAgentsLoaded'; agents: UserAgentConfig[] }
   | { type: 'routeError'; requestId: number }
   | { type: 'resourcesSearching'; taskId: string; query: string }
-  | { type: 'resourcesReady'; resources: TaskResourcesResult };
+  | { type: 'resourcesReady'; resources: TaskResourcesResult }
+  | { type: 'taskOutput'; project_id: string; task_id: string; run_id: string; chunk: string; stream: 'stdout' | 'stderr' | 'status'; timestamp: string };
 
 export function isPanelMessage(message: unknown): message is PanelMessage {
-  if (typeof message !== 'object' || message === null
-    || !('text' in message) || typeof message.text !== 'string'
-    || !('requestId' in message) || !Number.isSafeInteger(message.requestId)
-    || !('type' in message)) return false;
+  if (typeof message !== 'object' || message === null || !('type' in message)) return false;
+  if (!('text' in message) || typeof message.text !== 'string'
+    || !('requestId' in message) || !Number.isSafeInteger(message.requestId)) return false;
   return message.type === 'previewContext' || (message.type === 'routeTask'
     && 'sources' in message && Array.isArray(message.sources)
     && message.sources.every((source: unknown) => typeof source === 'string'));
 }
-import { z } from 'zod';
 
 export const RouteSchema = z.object({
   task_type: z.enum(['research', 'planning', 'implementation', 'debugging', 'testing', 'review', 'docs']),
@@ -114,6 +187,44 @@ export const RouteSchema = z.object({
 });
 export type Route = z.infer<typeof RouteSchema>;
 
+export const YouTubeVideoItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  url: z.string(),
+  thumbnailUrl: z.string(),
+  channel: z.string(),
+  views: z.string().optional(),
+  published: z.string().optional(),
+});
+
+export const BlogItemSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  source: z.string(),
+  snippet: z.string(),
+  readingTime: z.string().optional(),
+  reactions: z.string().optional(),
+});
+
+export const ResearchArtifactItemSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  source: z.string(),
+  summary: z.string(),
+  authors: z.string().optional(),
+  year: z.string().optional(),
+});
+
+export const TaskResourcesResultSchema = z.object({
+  taskId: z.string(),
+  query: z.string(),
+  tier: z.enum(['intelligent', 'keyword']),
+  notice: z.string().optional(),
+  videos: z.array(YouTubeVideoItemSchema),
+  blogs: z.array(BlogItemSchema),
+  artifacts: z.array(ResearchArtifactItemSchema),
+});
+
 export const TaskRecordSchema = z.object({
   id: z.string().min(1),
   createdAt: z.string().datetime(),
@@ -123,6 +234,14 @@ export const TaskRecordSchema = z.object({
   decision: z.string(),
   plan: z.string().optional(),
   status: z.enum(['routed', 'planned', 'running', 'done', 'blocked']),
+  taskFolder: z.string().optional(),
+  planningPrompt: z.string().optional(),
+  planningPlatform: z.string().optional(),
+  planningReason: z.string().optional(),
+  attachFiles: z.array(z.string()).optional(),
+  attachedFiles: z.array(z.string()).optional(),
+  flowStatus: z.string().optional(),
+  finishSummary: z.string().optional(),
   outcome: z.string().optional(),
   changedFiles: z.array(z.string()).optional(),
   workspaceUri: z.string().optional(),
@@ -133,6 +252,12 @@ export const TaskRecordSchema = z.object({
   kb_stale: z.boolean().optional(),
   kb_note: z.string().nullable().optional(),
   approvals: z.array(z.object({ approvedAt: z.string().datetime(), workspaceUri: z.string() })).optional(),
+  resources: TaskResourcesResultSchema.optional(),
+  runnerAgent: UserAgentConfigSchema.optional(),
+  agentType: z.enum(['web', 'local']).optional(),
+  githubAttached: z.boolean().optional(),
+  githubUrl: z.string().optional(),
+  lapNumber: z.number().optional(),
 });
 export type TaskRecord = z.infer<typeof TaskRecordSchema>;
 
@@ -153,6 +278,12 @@ export const SessionTurnSchema = z.object({
   overrode: z.boolean().optional(),
   recommended_model: z.string().nullable().optional(),
   model_reasoning: z.enum(['low', 'medium', 'high', 'default']).nullable().optional(),
+  resources: TaskResourcesResultSchema.optional(),
+  runnerAgent: UserAgentConfigSchema.optional(),
+  agentType: z.enum(['web', 'local']).optional(),
+  githubAttached: z.boolean().optional(),
+  githubUrl: z.string().optional(),
+  lapNumber: z.number().optional(),
 });
 export type SessionTurn = z.infer<typeof SessionTurnSchema>;
 
@@ -164,7 +295,9 @@ export const SessionRecordSchema = z.object({
   workspaceUri: z.string().optional(),
   taskIds: z.array(z.string()).optional(),
   turns: z.array(SessionTurnSchema).optional(),
-});export type SessionRecord = z.infer<typeof SessionRecordSchema>;
+  finished: z.boolean().optional(),
+});
+export type SessionRecord = z.infer<typeof SessionRecordSchema>;
 
 /** Stats record for tracking research agent outcomes */
 export const StatsRecordSchema = z.object({
@@ -180,6 +313,7 @@ export type SessionViewMessage =
   | { type: 'loadSessions' }
   | { type: 'openProject' }
   | { type: 'newSession' }
+  | { type: 'finishRaceSession'; sessionId?: string }
   | { type: 'selectSession'; sessionId: string }
   | { type: 'deleteSession'; sessionId: string }
   | { type: 'openVsCodeSetKeys' }
@@ -194,8 +328,8 @@ export type SessionViewMessage =
 
 export function isSessionViewMessage(message: unknown): message is SessionViewMessage {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false;
-  if (message.type === 'loadSessions' || message.type === 'newSession' || message.type === 'openProject'
-    || message.type === 'openVsCodeSetKeys' || message.type === 'personalKeysStatus'
+  if (message.type === 'loadSessions' || message.type === 'newSession' || message.type === 'finishRaceSession'
+    || message.type === 'openProject' || message.type === 'openVsCodeSetKeys' || message.type === 'personalKeysStatus'
     || message.type === 'routerSettingsStatus' || message.type === 'mcpStatusRequest'
     || message.type === 'mcpToggle' || message.type === 'mcpCopyConfig') {
     return true;

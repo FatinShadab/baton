@@ -39,10 +39,10 @@ export async function clearPersonalKey(secrets: vscode.SecretStorage, provider: 
 // F5 runs the extension from this repository.
 // Import only known keys into SecretStorage; never expose .env to task context.
 export async function importDevelopmentKeys(context: vscode.ExtensionContext): Promise<void> {
-  // Required lazily so KB scripts can import the router outside the extension host.
-  const vscode = require('vscode') as typeof import('vscode');
-  if (context.extensionMode !== vscode.ExtensionMode.Development) return;
   try {
+    // Required lazily so KB scripts can import the router outside the extension host.
+    const vscode = require('vscode') as typeof import('vscode');
+    if (!vscode?.ExtensionMode || context?.extensionMode !== vscode.ExtensionMode.Development) return;
     const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(context.extensionUri, '.env'));
     const source = Buffer.from(bytes).toString('utf8');
     for (const line of source.split(/\r?\n/)) {

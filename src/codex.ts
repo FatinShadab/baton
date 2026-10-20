@@ -25,6 +25,10 @@ export const CodexCapabilities = {
 };
 
 function requireRunnable(task: TaskRecord): 'RUN' | 'CONFIRM' {
+  if (task.flowStatus && !['race_ready'].includes(task.flowStatus)) {
+    throw new Error(task.flowStatus === 'awaiting_plan' ? 'Paste and save the plan before running this task.'
+      : 'This task is not ready to run.');
+  }
   if (task.route.recommended_destination === 'antigravity' || task.route.recommended_destination === 'copilot') {
     throw new Error('This agent has no Baton run adapter. Open its prompt manually.');
   }
@@ -52,6 +56,9 @@ export class CodexRunner implements vscode.Disposable {
     this.pending.add(message.taskId);
     try {
       const task = await this.load(message.taskId);
+      if (task.status === 'done' && message.type !== 'showDiff') {
+        throw new Error('Closed tasks are read-only. Create a linked follow-up task.');
+      }
       switch (message.type) {
         case 'runCodex': notice = await this.run(task); break;
         case 'markDone': notice = await this.markDone(task); break;
@@ -70,6 +77,12 @@ export class CodexRunner implements vscode.Disposable {
   private async load(id: string): Promise<TaskRecord> {
     const task = (await this.store.loadTasks())?.find((entry) => entry.id === id);
     if (!task) throw new Error('Could not find the saved task. Refresh History and try again.');
+    if (task.taskFolder) {
+      try {
+        const state = JSON.parse(await readFile(path.join(task.taskFolder, 'state.json'), 'utf8')) as { status?: string };
+        if (state.status) task.flowStatus = state.status;
+      } catch { throw new Error('Could not load task state. Reopen this task before running it.'); }
+    }
     return task;
   }
 

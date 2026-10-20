@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}';">
   <link rel="stylesheet" href="{{styleUri}}">
-  <title>Task Manager</title>
+  <title>Race Manager</title>
 </head>
 <body>
   <header class="session-header">
@@ -38,7 +38,7 @@
       </div>
     </div>
     <div class="section-label">
-      <span class="section-arrow">▾</span> TASK MANAGER
+      <span class="section-arrow">▾</span> RACE SESSIONS
     </div>
   </header>
 
@@ -55,7 +55,7 @@
   <div id="no-project-banner" class="no-project-banner" hidden>
     <div class="no-project-icon">📂</div>
     <h3 class="no-project-title">No Project Open</h3>
-    <p class="no-project-text">Tasks are organized under a project. Open or create a project folder in VS Code to get started.</p>
+    <p class="no-project-text">Race sessions are organized under a project. Open or create a project folder in VS Code to get started.</p>
     <button id="open-project-btn" type="button" class="btn-open-project">
       <span class="btn-icon">📁</span> Open or Create Project
     </button>
@@ -65,7 +65,7 @@
   <div id="tasks-container">
     <div class="session-actions">
       <button id="new-session-btn" type="button" class="btn-new-session">
-        <span class="plus-icon">+</span> New task
+        <span class="plus-icon">+</span> New race session
       </button>
     </div>
 
@@ -74,13 +74,13 @@
         <circle cx="11" cy="11" r="8"></circle>
         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
       </svg>
-      <input id="session-search" type="search" placeholder="Search tasks..." autocomplete="off" spellcheck="false">
+      <input id="session-search" type="search" placeholder="Search races..." autocomplete="off" spellcheck="false">
     </div>
 
     <div id="session-list" class="session-list" role="list">
       <div id="empty-state" class="empty-state">
-        <p class="empty-msg">No tasks yet</p>
-        <p class="empty-hint">Start a new conversation to create your first task for this project.</p>
+        <p class="empty-msg">No race sessions yet</p>
+        <p class="empty-hint">Start a new conversation to create your first race session for this project.</p>
       </div>
     </div>
   </div>

@@ -9,6 +9,7 @@ function initializeTaskActions(vscode) {
     const options = [];
     if (installed.codex && !['antigravity', 'copilot'].includes(task.route?.recommended_destination)
       && task.saved !== false && ['RUN', 'CONFIRM'].includes(task.decision)
+      && (!task.flowStatus || task.flowStatus === 'race_ready')
       && task.route?.risk_tier !== 'high' && !['running', 'done', 'blocked'].includes(task.status)) {
       options.push(['codex', 'Codex CLI — run task']);
     }

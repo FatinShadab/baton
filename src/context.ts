@@ -2,20 +2,16 @@ import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import * as path from 'node:path';
-import { search } from './memory';
 import { currentProjectFolder } from './project';
+import { allowed } from './path-policy';
+export { allowed } from './path-policy';
 
 const MAX_FILE_BYTES = 100 * 1024;
 export const MAX_CONTEXT_CHARS = 6000;
-const excluded = /^(?:\.env(?:\..*)?|.*\.(?:pem|key)|id_rsa.*|credentials.*|node_modules|\.git)$/i;
 const gitExclusions = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'credentials*', 'node_modules', '.git'];
 
 export type ContextPart = { source: string; text: string };
 export type BuiltContext = { text: string; sources: string[]; parts: ContextPart[]; workspaceUri?: string };
-
-export function allowed(filename: string): boolean {
-  return !filename.split(/[\\/]/).some((part) => excluded.test(part));
-}
 
 export async function safeFile(filename: string, root: string): Promise<string | undefined> {
   if (!allowed(filename)) return undefined;
@@ -121,16 +117,6 @@ export async function buildContext(task: string): Promise<BuiltContext> {
       add(`${folder.name}: git diff --stat`, diff);
     }
   } catch { /* Workspace failures must not prevent routing. */ }
-  try {
-    const hits = await search(task, 5);
-    const workspaceParts = parts.splice(0);
-    for (const hit of hits) {
-      if (hit.meta?.workspaceUri === folder?.uri.toString()
-        && allowed(hit.source) && Buffer.byteLength(hit.text, 'utf8') <= MAX_FILE_BYTES) add(hit.source, hit.text);
-    }
-    // Put relevant memories first so the final character cap keeps prior plans.
-    parts.push(...workspaceParts);
-  } catch { /* Memory is optional. */ }
   return { text: parts.map((part) => part.text).join('\n\n'), sources: parts.map((part) => part.source), parts,
     workspaceUri: folder?.uri.scheme === 'file' ? folder.uri.toString() : undefined };
 }

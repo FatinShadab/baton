@@ -1,6 +1,14 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 
 const OPEN_BROWSER = 'workbench.action.browser.open';
+
+function getVsCode(): typeof vscode | undefined {
+  try {
+    return require('vscode');
+  } catch {
+    return undefined;
+  }
+}
 
 async function withinTimeout<T>(operation: Thenable<T>, timeoutMs = 10_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -14,9 +22,13 @@ async function withinTimeout<T>(operation: Thenable<T>, timeoutMs = 10_000): Pro
 }
 
 export async function openIntegratedBrowser(url: string): Promise<void> {
-  const commands = await withinTimeout(vscode.commands.getCommands(true));
+  const vsc = getVsCode();
+  if (!vsc) {
+    throw new Error('VS Code is not available.');
+  }
+  const commands = await withinTimeout(vsc.commands.getCommands(true));
   if (!commands.includes(OPEN_BROWSER)) {
     throw new Error('The VS Code integrated browser is unavailable. Update VS Code and try again.');
   }
-  await withinTimeout(vscode.commands.executeCommand(OPEN_BROWSER, url));
+  await withinTimeout(vsc.commands.executeCommand(OPEN_BROWSER, url));
 }

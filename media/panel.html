@@ -16,10 +16,18 @@
         <path d="m13 9 3 3M5 5v4M3 7h4"/>
       </svg>
       <span class="brand-title">Baton</span>
-      <span id="session-chip" class="session-chip" title="Active task">New task</span>
+      <span id="session-chip" class="session-chip" title="Active race session">New race session</span>
     </div>
 
     <div class="header-actions">
+      <button id="finish-race-btn" type="button" class="header-btn header-btn-finish" title="Finish Baton Race and show handoff pipeline" hidden>
+        <span class="finish-flag-icon">🏁</span>
+        <span class="header-btn-text">Finish Race</span>
+      </button>
+      <button id="toggle-track-btn" type="button" class="header-btn header-btn-track" title="Toggle Relay Race Track" aria-label="Toggle Relay Race Track" hidden>
+        <span class="track-icon">🏃</span>
+        <span class="header-btn-text">Race Track</span>
+      </button>
       <button id="toggle-research-btn" type="button" class="header-btn" title="Toggle Resources and Media" aria-label="Toggle Resources and Media" aria-pressed="true">
         <svg class="header-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -27,7 +35,7 @@
         </svg>
         <span class="header-btn-text">Resources</span>
       </button>
-      <button id="new-session-header-btn" type="button" class="header-btn header-btn-primary" title="Start a fresh task">+ New Task</button>
+      <button id="new-session-header-btn" type="button" class="header-btn header-btn-primary" title="Start a fresh race session">+ New Race</button>
     </div>
   </header>
 
@@ -57,6 +65,56 @@
           <img src="{{watermarkUri}}" alt="" class="watermark-img" />
         </div>
 
+        <!-- Left Side Baton Relay Race Track (In left free space) -->
+        <aside id="agent-race-track" class="agent-race-track" aria-label="Baton Relay Race Track" hidden>
+          <div class="race-track-card">
+            <div class="race-track-header">
+              <div class="race-track-title-wrap">
+                <span class="race-track-ping-dot"></span>
+                <span class="race-track-title">Relay</span>
+              </div>
+              <div class="race-track-header-actions">
+                <span id="race-track-distance-badge" class="race-track-badge">400m</span>
+                <button id="close-race-track-btn" type="button" class="race-track-close-btn" title="Hide race track" aria-label="Close race track">&times;</button>
+              </div>
+            </div>
+            <div class="race-track-body">
+              <!-- Vertical Straight Line Track Lane with Start, Segments, Nodes, and Finish Line -->
+              <div class="race-track-straight-lane-wrapper">
+                <div class="race-track-start-marker">
+                  <span class="marker-flag">🚩</span>
+                  <span class="marker-label">START</span>
+                </div>
+                <div id="race-track-lane" class="race-track-straight-lane">
+                  <div class="track-center-guide"></div>
+                  <div id="race-track-segments-container" class="race-track-segments-container"></div>
+                  <div id="race-track-nodes-container" class="race-track-nodes-container"></div>
+                </div>
+                <div class="race-track-finish-line-marker">
+                  <div class="finish-checkered-tape"></div>
+                  <span class="marker-flag">🏁</span>
+                  <span class="marker-label">FINISH</span>
+                </div>
+              </div>
+              <!-- Hidden container for backward compatibility -->
+              <div id="race-track-steps" class="race-track-steps" style="display: none;"></div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Right Side Floating Agent Dock (In the free space) -->
+        <aside id="floating-agents-sidebar" class="floating-agents-sidebar" aria-label="Floating AI Agents">
+          <div class="floating-agents-header">
+            <button id="floating-add-agent-btn" type="button" class="floating-add-agent-btn" title="Add or manage AI agents" aria-label="Add or manage agents">
+              <span class="plus-icon">+</span>
+              <span class="btn-text">Add Agent</span>
+            </button>
+          </div>
+          <div id="floating-agents-list" class="floating-agents-list">
+            <!-- Dynamically populated floating agent cards with AI Bot icons -->
+          </div>
+        </aside>
+
         <!-- Chat Stream Scroll Container -->
         <div class="chat-scroll-area">
           <div id="chat-stream" class="chat-stream">
@@ -69,6 +127,51 @@
                 </svg>
               </div>
               <h2 class="hero-headline">Hand off coding tasks to the right AI model or agent.</h2>
+
+              <!-- Center Active Agent Indicator -->
+              <div id="center-agent-indicator" class="center-agent-indicator" hidden>
+                <div class="center-agent-avatar" id="center-agent-avatar">C</div>
+                <div class="center-agent-info">
+                  <div class="center-agent-name-row">
+                    <strong id="center-agent-name" class="center-agent-name">Claude Architect</strong>
+                    <span id="center-agent-model-pill" class="center-agent-model-pill">claude-3-7-sonnet</span>
+                  </div>
+                  <span id="center-agent-subtext" class="center-agent-subtext">Active agent assigned to this task</span>
+                </div>
+                <button id="center-agent-config-btn" type="button" class="center-agent-config-btn">Configure</button>
+              </div>
+
+              <!-- Dynamic Relay Team & Race Stats Card -->
+              <div id="race-team-card" class="tip-card race-team-card">
+                <div class="tip-header">
+                  <div class="tip-title-wrap">
+                    <span class="tip-icon">🏁</span>
+                    <strong class="tip-title">Active Relay Team</strong>
+                  </div>
+                  <span id="race-team-count-badge" class="modal-count-badge">3 Runners</span>
+                </div>
+                <div class="tip-body">
+                  <p class="guide-intro">Baton classifies every prompt and hands the baton to the right runner. Web agents handle planning and uncertainty; Local agents handle execution.</p>
+                  <div id="hero-team-roster" class="hero-team-roster">
+                    <!-- Populated dynamically with configured agents -->
+                  </div>
+                  <div class="relay-stats-bar">
+                    <div class="stat-pill">
+                      <span class="stat-label">Baton Holder:</span>
+                      <strong id="stat-baton-holder">Claude Architect</strong>
+                    </div>
+                    <div class="stat-pill">
+                      <span class="stat-label">MCP Memory:</span>
+                      <span id="stat-mcp-status" class="stat-active">Ready</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="suggestion-pills">
+                  <button type="button" class="pill-btn" data-prompt="Plan the architecture for multi-agent handoff">🌐 Plan Architecture</button>
+                  <button type="button" class="pill-btn" data-prompt="Implement the core refactor and write unit tests">💻 Execute Code</button>
+                  <button type="button" class="pill-btn" data-prompt="Research best practices and compare approaches">🔍 Research & Do</button>
+                </div>
+              </div>
 
               <!-- Getting Started Onboarding Card -->
               <div id="auto-mode-card" class="tip-card">
@@ -123,6 +226,11 @@
 
         <!-- Floating Prompt Dock (Centered directly under chat stream) -->
         <div class="dock-container">
+          <div id="task-complete-banner" class="task-complete-banner" hidden>
+            <span class="complete-icon">🏁</span>
+            <span class="complete-text">Race session finished · Relay pipeline recorded</span>
+            <button id="complete-new-task-btn" type="button" class="btn-primary complete-btn">+ New Race</button>
+          </div>
           <form id="task-form" class="floating-prompt-dock">
             <textarea id="task" rows="2" placeholder="Ask Baton to edit, route, or build... (Enter to route, Shift+Enter for newline)" required></textarea>
             <div class="dock-footer">
@@ -165,6 +273,7 @@
           </div>
           <div class="research-header-right">
             <span id="research-tier-badge" class="research-tier-badge">Standby</span>
+            <button id="refresh-research-btn" type="button" class="research-refresh-btn" title="Refresh resources for this task" aria-label="Refresh resources">&#8635;</button>
             <button id="close-research-btn" type="button" class="research-close-btn" title="Collapse Resources and Media" aria-label="Collapse Resources and Media">&times;</button>
           </div>
         </div>
@@ -231,10 +340,143 @@
     </div>
   </section>
 
+  <!-- Agent Directory & Configuration Modal -->
+  <div id="agent-manager-modal" class="baton-modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
+    <div class="agent-modal-card">
+      <div class="modal-card-header">
+        <div class="modal-card-title-wrap">
+          <span class="modal-title-icon">🤖</span>
+          <h3 id="agent-modal-title" class="modal-card-title">Agent Directory</h3>
+          <span id="agent-count-badge" class="modal-count-badge">3 Configured</span>
+        </div>
+        <button id="close-agent-modal-btn" type="button" class="modal-close-btn" aria-label="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-card-body">
+        <form id="agent-form" class="agent-form">
+          <input type="hidden" id="agent-edit-id" value="">
+          <div class="form-group">
+            <label for="agent-name-input" class="form-label">Agent Name</label>
+            <input id="agent-name-input" type="text" class="form-input" placeholder="e.g. Claude Architect, Codex CLI" required>
+          </div>
+
+          <div class="form-group">
+            <label for="agent-models-input" class="form-label">Available Models (comma separated)</label>
+            <input id="agent-models-input" type="text" class="form-input" placeholder="e.g. claude-3-7-sonnet, gpt-4o, gemini-2.5-pro" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Agent Role & Type</label>
+            <div class="agent-type-toggle-row">
+              <label class="agent-type-radio-label">
+                <input type="radio" name="agent-type" value="web" checked class="type-radio" id="agent-type-web">
+                <span class="type-badge-opt">🌐 Web Agent (Planning, Uncertainty & Research)</span>
+              </label>
+              <label class="agent-type-radio-label">
+                <input type="radio" name="agent-type" value="local" class="type-radio" id="agent-type-local">
+                <span class="type-badge-opt">💻 Local Agent (Direct Code & CLI Execution)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">GitHub Integration</label>
+            <label class="checkbox-row-label">
+              <input type="checkbox" id="agent-github-attached" class="agent-checkbox">
+              <span>Attached to GitHub (Shows one-click "Open in GitHub" route button)</span>
+            </label>
+            <input id="agent-url-input" type="url" class="form-input" placeholder="Custom URL (e.g. https://claude.ai/new or GitHub repo URL)" style="margin-top: 6px;">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Color Theme</label>
+            <div class="color-picker-row">
+              <label class="color-swatch-label">
+                <input type="radio" name="agent-color" value="purple" checked class="color-radio">
+                <span class="color-swatch swatch-purple"></span>
+              </label>
+              <label class="color-swatch-label">
+                <input type="radio" name="agent-color" value="cyan" class="color-radio">
+                <span class="color-swatch swatch-cyan"></span>
+              </label>
+              <label class="color-swatch-label">
+                <input type="radio" name="agent-color" value="emerald" class="color-radio">
+                <span class="color-swatch swatch-emerald"></span>
+              </label>
+              <label class="color-swatch-label">
+                <input type="radio" name="agent-color" value="amber" class="color-radio">
+                <span class="color-swatch swatch-amber"></span>
+              </label>
+              <label class="color-swatch-label">
+                <input type="radio" name="agent-color" value="rose" class="color-radio">
+                <span class="color-swatch swatch-rose"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button id="agent-cancel-edit-btn" type="button" class="btn-secondary" hidden>Cancel</button>
+            <button id="agent-submit-btn" type="submit" class="btn-primary flex-1">+ Save Agent</button>
+          </div>
+        </form>
+
+        <div class="saved-agents-section">
+          <h4 class="saved-agents-title">Saved Agents (Click to activate)</h4>
+          <div id="saved-agents-list" class="saved-agents-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Session Detail & Disable Modal -->
+  <div id="agent-session-modal" class="baton-modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="session-modal-title">
+    <div class="agent-session-card">
+      <div class="modal-card-header">
+        <div class="modal-card-title-wrap">
+          <div id="session-agent-avatar" class="session-agent-avatar">C</div>
+          <div>
+            <h3 id="session-modal-title" class="modal-card-title">Agent Settings</h3>
+            <span id="session-agent-role" class="session-agent-role">Active in current task</span>
+          </div>
+        </div>
+        <button id="close-agent-session-modal-btn" type="button" class="modal-close-btn" aria-label="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-card-body">
+        <div class="session-agent-details">
+          <div class="detail-row">
+            <span class="detail-label">Agent Name:</span>
+            <strong id="session-agent-name" class="detail-value">Claude Architect</strong>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Agent Type:</span>
+            <span id="session-agent-type" class="detail-value">Web Agent</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">GitHub Integration:</span>
+            <span id="session-agent-github" class="detail-value">Attached</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Available Models:</span>
+            <span id="session-agent-models" class="detail-value font-mono">claude-3-7-sonnet</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Status for this session:</span>
+            <span id="session-agent-status-badge" class="status-badge-active">Active</span>
+          </div>
+        </div>
+
+        <div class="session-modal-actions">
+          <button id="session-edit-agent-btn" type="button" class="btn-secondary">Edit Agent</button>
+          <button id="session-toggle-disable-btn" type="button" class="btn-danger">Disable for this task session</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Friendly Toast Notifications Container -->
   <div id="toast-container" class="toast-container" aria-live="assertive" role="region" aria-label="Notifications"></div>
 
-  <script nonce="{{nonce}}" src="{{actionsUri}}"></script>
   <script nonce="{{nonce}}" src="{{resourcesUri}}"></script>
   <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
 </body>

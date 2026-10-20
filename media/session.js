@@ -77,7 +77,7 @@
 
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'session-card-delete';
-      deleteBtn.title = 'Delete task';
+      deleteBtn.title = session.taskState ? 'Abandon task' : 'Delete empty task';
       deleteBtn.innerHTML = '&#128465;'; // trash can icon
       deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -96,7 +96,12 @@
       meta.append(time);
 
       const turnCount = session.turns?.filter((t) => t.role === 'user')?.length || session.taskIds?.length || 0;
-      if (turnCount > 0) {
+      if (session.taskState) {
+        const badge = document.createElement('span');
+        badge.className = 'session-badge';
+        badge.textContent = `${session.taskState} · ${session.nextAction || ''}`;
+        meta.append(badge);
+      } else if (turnCount > 0) {
         const badge = document.createElement('span');
         badge.className = 'session-badge';
         badge.textContent = `${turnCount} prompt${turnCount > 1 ? 's' : ''}`;

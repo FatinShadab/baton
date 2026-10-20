@@ -1,13 +1,23 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { openIntegratedBrowser } from './browser';
+import { buildPlanPrompt } from './planning-prompt';
 
-export type HandoffTarget = 'chatgpt' | 'gemini' | 'antigravity';
-export type BrowserHandoffTarget = 'chatgpt' | 'gemini';
+function getVsCode(): typeof vscode | undefined {
+  try {
+    return require('vscode');
+  } catch {
+    return undefined;
+  }
+}
+
+export type HandoffTarget = 'chatgpt' | 'gemini' | 'claude' | 'antigravity';
+export type BrowserHandoffTarget = 'chatgpt' | 'gemini' | 'claude';
 export type HandoffOutcome = { notice: string; externalTarget?: BrowserHandoffTarget };
 
-const TARGETS: Record<BrowserHandoffTarget, string> = {
+export const TARGETS: Record<BrowserHandoffTarget, string> = {
   chatgpt: 'https://chatgpt.com/',
   gemini: 'https://gemini.google.com/app',
+  claude: 'https://claude.ai/new',
 };
 
 const EXTENSIONS = {
@@ -15,44 +25,26 @@ const EXTENSIONS = {
 } as const;
 
 export function handoffAvailability(): Record<keyof typeof EXTENSIONS, boolean> {
+  const vsc = getVsCode();
   return {
-    antigravity: Boolean(vscode.extensions.getExtension(EXTENSIONS.antigravity)),
+    antigravity: Boolean(vsc?.extensions.getExtension(EXTENSIONS.antigravity)),
   };
-}
-
-export function buildPlanPrompt(task: string, context: string): string {
-  const sections = [
-    'You are an expert software engineer. A developer needs a concrete implementation plan.',
-    '',
-    '## Task',
-    task,
-  ];
-  if (context.trim()) {
-    sections.push('', '## Project context', context);
-  }
-  sections.push(
-    '',
-    '## Instructions',
-    'Return a numbered implementation plan that includes:',
-    '1. Each file to create or change, with a brief description of the changes.',
-    '2. Risks and edge cases to watch for.',
-    '3. Suggested tests to verify the changes.',
-    '',
-    'Be specific and actionable. Do not include code unless it clarifies a non-obvious step.',
-  );
-  return sections.join('\n');
 }
 
 export async function planExternal(
   target: HandoffTarget,
   task: string,
   context: string,
+  preparedPrompt?: string,
 ): Promise<HandoffOutcome> {
-  const prompt = buildPlanPrompt(task, context);
+  const prompt = preparedPrompt ?? buildPlanPrompt(task, context);
   let copied = false;
+  const vsc = getVsCode();
   try {
-    await vscode.env.clipboard.writeText(prompt);
-    copied = true;
+    if (vsc) {
+      await vsc.env.clipboard.writeText(prompt);
+      copied = true;
+    }
   } catch {
     // Claude Code can still receive its initial prompt directly.
   }
@@ -60,8 +52,8 @@ export async function planExternal(
   const installed = handoffAvailability();
   try {
     if (!copied) return { notice: 'Baton could not copy the prompt to the clipboard.' };
-    if (target === 'antigravity' && installed.antigravity) {
-      await vscode.commands.executeCommand('antigravity.panel.focus');
+    if (target === 'antigravity' && installed.antigravity && vsc) {
+      await vsc.commands.executeCommand('antigravity.panel.focus');
       return { notice: 'Antigravity opened. Paste the copied prompt into its chat.' };
     }
     if (target === 'antigravity') {
@@ -70,7 +62,7 @@ export async function planExternal(
     await openIntegratedBrowser(TARGETS[target]);
     return { notice: 'Opened in VS Code. Sign in if needed, then paste the copied prompt.', externalTarget: target };
   } catch {
-    return copied && (target === 'chatgpt' || target === 'gemini')
+    return copied && (target === 'chatgpt' || target === 'gemini' || target === 'claude')
       ? { notice: 'Prompt copied, but the integrated browser could not open. Use Open externally below.', externalTarget: target }
       : { notice: copied ? 'Prompt copied, but Baton could not open the target. Paste it manually.'
         : 'Baton could not open the target or copy the prompt.' };
@@ -78,19 +70,29 @@ export async function planExternal(
 }
 
 export async function openExternalHandoff(target: BrowserHandoffTarget): Promise<string> {
+  const vsc = getVsCode();
   try {
-    await vscode.env.openExternal(vscode.Uri.parse(TARGETS[target]));
-    return 'Opened the planning site externally. Paste the copied prompt there.';
+    if (vsc) {
+      await vsc.env.openExternal(vsc.Uri.parse(TARGETS[target]));
+      return 'Opened the planning site externally. Paste the copied prompt there.';
+    }
+    return 'Could not open the planning site externally. The prompt is still on your clipboard.';
   } catch {
     return 'Could not open the planning site externally. The prompt is still on your clipboard.';
   }
 }
 
 export async function readClipboard(): Promise<string> {
+  const vsc = getVsCode();
   try {
-    return await vscode.env.clipboard.readText();
+    if (vsc) {
+      return await vsc.env.clipboard.readText();
+    }
+    return '';
   } catch {
-    void vscode.window.showErrorMessage('Baton could not read the clipboard.');
+    if (vsc) {
+      void vsc.window.showErrorMessage('Baton could not read the clipboard.');
+    }
     return '';
   }
 }

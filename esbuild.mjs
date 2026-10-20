@@ -10,7 +10,7 @@ const base = {
 };
 const entries = [
   { ...base, entryPoints: ['src/extension.ts'], outfile: 'dist/extension.js', external: ['vscode'] },
-  { ...base, entryPoints: ['src/mcp/server.ts'], outfile: 'out/mcp.js' },
+  { ...base, entryPoints: ['src/mcp/server.ts'], outfile: 'out/mcp.js', external: ['vscode'] },
 ];
 
 try {

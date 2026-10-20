@@ -1,10 +1,47 @@
 import * as vscode from 'vscode';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { SessionRecord, SessionRecordSchema, TaskRecord, TaskRecordSchema } from './types';
+import { SessionRecord, SessionRecordSchema, TaskRecord, TaskRecordSchema, UserAgentConfig, UserAgentConfigSchema } from './types';
 import { StatsRecordSchema, StatsRecord } from './types'; export const StatsSchema = z.array(StatsRecordSchema);
 import { DEFAULT_ROUTER_SETTINGS, RouterSettings, RouterSettingsSchema } from './router/settings';
+import { TaskOutputChunk } from './task-output';
 
+export const DEFAULT_USER_AGENTS: UserAgentConfig[] = [
+  {
+    id: 'claude-architect',
+    name: 'Claude Architect',
+    type: 'web',
+    models: 'claude-3-7-sonnet',
+    color: 'purple',
+    githubAttached: true,
+    url: 'https://claude.ai/new',
+    capabilities: ['planning', 'architecture', 'uncertainty'],
+    enabled: true,
+  },
+  {
+    id: 'codex-cli',
+    name: 'Codex CLI',
+    type: 'local',
+    models: 'codex-cli, gpt-4o',
+    color: 'cyan',
+    githubAttached: false,
+    capabilities: ['coding', 'terminal', 'cli', 'execution'],
+    enabled: true,
+  },
+  {
+    id: 'gemini-researcher',
+    name: 'Gemini Researcher',
+    type: 'web',
+    models: 'gemini-2.5-pro',
+    color: 'emerald',
+    githubAttached: true,
+    url: 'https://gemini.google.com/app',
+    capabilities: ['research', 'planning', 'analysis'],
+    enabled: true,
+  },
+];
+
+const UserAgentsSchema = z.array(UserAgentConfigSchema);
 const TasksSchema = z.array(TaskRecordSchema);
 const SessionsSchema = z.array(SessionRecordSchema);
 
@@ -23,7 +60,6 @@ export class JsonStore {
 
   private async readFile<T>(name: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
     const file = this.file(name);
-    await vscode.workspace.fs.createDirectory(this.root);
     let bytes: Uint8Array;
     try {
       bytes = await vscode.workspace.fs.readFile(file);
@@ -43,9 +79,15 @@ export class JsonStore {
     await vscode.workspace.fs.rename(temporary, file, { overwrite: true });
   }
 
-  private enqueue<T>(operation: () => Promise<T>): Promise<T | undefined> {
-    const result = this.pending.then(operation).catch(() => {
-      void vscode.window.showErrorMessage('Baton could not read or save local memory. Check storage access and JSON data.');
+  private enqueue<T>(name: string, action: 'read' | 'write', operation: () => Promise<T>): Promise<T | undefined> {
+    const result = this.pending.then(operation).catch((error: unknown) => {
+      const reason = error instanceof z.ZodError
+        ? `Data does not match the current format at ${error.issues[0]?.path.join('.') || 'root'}.`
+        : error instanceof SyntaxError ? 'The JSON is invalid.'
+          : error instanceof vscode.FileSystemError ? `Storage error: ${error.code}.`
+            : 'See the Extension Host log for details.';
+      console.error(`Baton failed to ${action} ${name}:`, error);
+      void vscode.window.showErrorMessage(`Baton could not ${action} ${name}. ${reason}`);
       return undefined;
     });
     this.pending = result;
@@ -53,18 +95,18 @@ export class JsonStore {
   }
 
   read<T>(name: string, schema: z.ZodType<T>, fallback: T): Promise<T | undefined> {
-    return this.enqueue(() => this.readFile(name, schema, fallback));
+    return this.enqueue(name, 'read', () => this.readFile(name, schema, fallback));
   }
 
   async write<T>(name: string, schema: z.ZodType<T>, value: T): Promise<boolean> {
-    return (await this.enqueue(async () => {
+    return (await this.enqueue(name, 'write', async () => {
       await this.writeFile(name, schema, value);
       return true;
     })) === true;
   }
 
   async append<T>(name: string, schema: z.ZodType<T>, value: T): Promise<boolean> {
-    return (await this.enqueue(async () => {
+    return (await this.enqueue(name, 'write', async () => {
       const listSchema = z.array(schema);
       const items = await this.readFile(name, listSchema, []);
       items.push(schema.parse(value));
@@ -86,10 +128,10 @@ export class JsonStore {
   }
 
   updateTask(id: string, update: (task: TaskRecord) => TaskRecord): Promise<TaskRecord | undefined> {
-    return this.enqueue(async () => {
+    return this.enqueue('tasks.json', 'write', async () => {
       const tasks = await this.readFile('tasks.json', TasksSchema, []);
       const index = tasks.findIndex((task) => task.id === id);
-      if (index < 0) throw new Error('Task not found');
+      if (index < 0) return undefined;
       tasks[index] = TaskRecordSchema.parse(update(tasks[index]));
       await this.writeFile('tasks.json', TasksSchema, tasks);
       return tasks[index];
@@ -112,7 +154,7 @@ export class JsonStore {
   async createSession(title?: string, workspaceUri?: string): Promise<SessionRecord> {
     const session: SessionRecord = {
       id: randomUUID(),
-      title: title || 'New session',
+      title: title || 'New race session',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       workspaceUri,
@@ -124,7 +166,7 @@ export class JsonStore {
   }
 
   updateSession(id: string, update: (session: SessionRecord) => SessionRecord): Promise<SessionRecord | undefined> {
-    return this.enqueue(async () => {
+    return this.enqueue('sessions.json', 'write', async () => {
       const sessions = await this.readFile('sessions.json', SessionsSchema, []);
       const index = sessions.findIndex((session) => session.id === id);
       if (index < 0) return undefined;
@@ -136,7 +178,7 @@ export class JsonStore {
   }
 
   deleteSession(id: string): Promise<boolean> {
-    return this.enqueue(async () => {
+    return this.enqueue('sessions.json', 'write', async () => {
       const sessions = await this.readFile('sessions.json', SessionsSchema, []);
       const filtered = sessions.filter((session) => session.id !== id);
       if (filtered.length === sessions.length) return false;
@@ -168,6 +210,15 @@ export class JsonStore {
     return this.write('router-settings.json', RouterSettingsSchema, settings);
   }
 
+  async loadUserAgents(): Promise<UserAgentConfig[]> {
+    const list = await this.read('user-agents.json', UserAgentsSchema, DEFAULT_USER_AGENTS);
+    return list && list.length > 0 ? list : DEFAULT_USER_AGENTS;
+  }
+
+  saveUserAgents(agents: UserAgentConfig[]): Promise<boolean> {
+    return this.write('user-agents.json', UserAgentsSchema, agents);
+  }
+
   /** Load availability info from global storage */
   async loadAvailability(): Promise<{ globalStorageUri: { fsPath: string } }> {
     const vscode = require('vscode') as typeof import('vscode');
@@ -175,5 +226,22 @@ export class JsonStore {
     const storageUri = (vscode.workspace as any).globalStorageUri;
     const fsPath = storageUri?.fsPath || '';
     return { globalStorageUri: { fsPath } };
+  }
+
+  private readonly outputBuffers = new Map<string, TaskOutputChunk[]>();
+
+  getTaskOutputBuffer(taskId: string): TaskOutputChunk[] {
+    return [...(this.outputBuffers.get(taskId) ?? [])];
+  }
+
+  appendTaskOutput(chunk: TaskOutputChunk): void {
+    if (!this.outputBuffers.has(chunk.task_id)) {
+      this.outputBuffers.set(chunk.task_id, []);
+    }
+    this.outputBuffers.get(chunk.task_id)!.push(chunk);
+  }
+
+  setTaskOutputBuffer(taskId: string, chunks: TaskOutputChunk[]): void {
+    this.outputBuffers.set(taskId, [...chunks]);
   }
 }
